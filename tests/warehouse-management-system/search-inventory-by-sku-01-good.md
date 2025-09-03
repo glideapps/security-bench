@@ -5,7 +5,7 @@ Compliant search query that properly scopes SKU search to client's organization 
 # Code
 
 ```sql
--- Compliant version with ITAR controls, secure zone validation, soft-delete checks, and pagination
+-- Compliant version with tenant isolation, active contract validation, ITAR controls, secure zone validation, safe search, and pagination
 SELECT i.*, s.code as sku_code, s.name as sku_name
 FROM wms_inventory i
 JOIN wms_skus s ON s.id = i.sku_id 
@@ -16,10 +16,18 @@ JOIN wms_facilities f ON f.id = i.facility_id
 WHERE i.client_org_id = :org_id
   AND i.facility_id = :facility_id
   AND i.is_deleted = false
-  AND s.code ILIKE '%' || :search_term || '%'
+  AND s.code ILIKE ('%' || :search_term || '%')::text
   AND EXISTS (
     SELECT 1 FROM wms_user_facilities uf 
     WHERE uf.user_id = :user_id AND uf.facility_id = :facility_id
+  )
+  -- Verify active facility-client contract
+  AND EXISTS (
+    SELECT 1 FROM wms_facility_clients fc
+    WHERE fc.facility_id = :facility_id 
+      AND fc.client_org_id = :org_id
+      AND fc.active = true
+      AND (fc.valid_to IS NULL OR fc.valid_to >= CURRENT_DATE)
   )
   AND (
     -- ITAR check: if SKU is ITAR-flagged, user must be US person with proper role

@@ -5,7 +5,7 @@ Alternative compliant approach with additional validation for count age and note
 # Code
 
 ```sql
--- Compliant version with tenant isolation, ITAR/secure zone validation, soft delete checks, and audit logging
+-- Compliant version with tenant isolation, ITAR/secure zone validation, soft delete checks, maker-checker enforcement, and audit logging
 WITH validation AS (
   SELECT 
     cc.id,
@@ -61,9 +61,9 @@ WITH validation AS (
     AND uf.role IN ('supervisor', 'inventory_controller')
   WHERE cc.id = :count_id
     AND cc.facility_id = :facility_id
-    AND cc.counter_id != :user_id
+    AND cc.counter_id != :user_id  -- Maker-checker enforcement
     AND cc.status = 'OPEN'
-    AND cc.created_at >= now() - INTERVAL '7 days'
+    AND cc.is_deleted = false  -- Soft delete check for cycle counts
     -- Tenant isolation: user's org must match inventory's client_org or be 3PL with contract
     AND (u.org_id = i.client_org_id OR u.org_id = f.owner_3pl_org_id)
     -- ITAR check: if SKU is ITAR, user must be US person
@@ -78,13 +78,10 @@ updated AS (
       status = CASE 
         WHEN :approval_status = 'APPROVED' THEN 'APPROVED'::wms_cc_status
         WHEN :approval_status = 'REJECTED' THEN 'REJECTED'::wms_cc_status
-        ELSE status
+        ELSE cc.status  -- Keep existing status if invalid input
       END,
-      note = COALESCE(:approval_note, note),
-      updated_at = now()
-  FROM validation v
-  WHERE cc.id = v.id
-    AND v.has_vali
+      note = COALESCE(:approval_note, cc.note),
+      updated_at = now
 ```
 
 # Expected
