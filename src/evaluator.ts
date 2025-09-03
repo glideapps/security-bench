@@ -611,7 +611,7 @@ async function fixTestFile(model: string, testFileName: string): Promise<void> {
   const evaluationPromptPath = join(PROJECT_ROOT, 'evaluation-prompt.txt');
   const evaluationPrompt = await readFile(evaluationPromptPath, 'utf-8');
   
-  // Get previous evaluations from database for context
+  // Get previous evaluations from database for context before deleting
   const previousEvals = db.prepare(`
     SELECT DISTINCT model_name, actual_result, explanation 
     FROM evaluations 
@@ -623,6 +623,14 @@ async function fixTestFile(model: string, testFileName: string): Promise<void> {
   if (previousEvals && previousEvals.length > 0) {
     console.log(`Found ${previousEvals.length} previous evaluations for context`);
   }
+  
+  // Delete all existing results for this file from the database
+  const deleteResult = db.prepare(`
+    DELETE FROM evaluations 
+    WHERE test_file = ?
+  `).run(testFilePath);
+  
+  console.log(`Deleted ${deleteResult.changes} existing evaluation(s) for this file from the database`);
   
   // Evaluate the current code with context
   console.log(`Evaluating with ${model}...`);
