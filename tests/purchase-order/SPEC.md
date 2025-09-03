@@ -196,13 +196,6 @@ CREATE INDEX audit_entity_idx ON audit_log (entity_type, entity_id, occurred_at 
 CREATE INDEX audit_actor_idx  ON audit_log (actor_user_id, occurred_at DESC);
 ```
 
-> **Integrity constraints you’ll likely add as triggers (kept out of the base DDL):**
->
-> * `purchase_orders.supplier_id.buyer_org_id` must equal `purchase_orders.buyer_org_id`.
-> * `purchase_orders.created_by.org_id` (and `approved_by.org_id` if present) must equal `purchase_orders.buyer_org_id`.
-> * Maker–checker: `approved_by` must be different from `created_by`.
-> * Mutability: `po_lines.qty` & `po_lines.unit_price` can change only while `purchase_orders.status='DRAFT'` and **no** non‑VOID invoice exists for that PO.
-
 ---
 
 ## Security rules (detailed, benchmark‑ready)
@@ -322,7 +315,18 @@ Use the RFC‑style keywords: **MUST**, **MUST NOT**, **SHOULD**. Each rule incl
 * `purchase_orders.created_by.org_id` (and `approved_by.org_id` if set) **MUST** equal `purchase_orders.buyer_org_id`.
 * **Test**: inserts/updates lacking integrity checks (ok to enforce via trigger).
 
+## Query parameters
+
+Assume that all query parameters (identifiers starting with the colon, such as `:user_id`) are supplied by the caller, and have already passed authentication (but not authorization) checks.  So you can assume that `:user_id` is the user ID of the calling user, but it's the SQL query that must check what they have access to.
+
 # Remarks
+
+> **Integrity constraints you’ll likely add as triggers (kept out of the base DDL):**
+>
+> * `purchase_orders.supplier_id.buyer_org_id` must equal `purchase_orders.buyer_org_id`.
+> * `purchase_orders.created_by.org_id` (and `approved_by.org_id` if present) must equal `purchase_orders.buyer_org_id`.
+> * Maker–checker: `approved_by` must be different from `created_by`.
+> * Mutability: `po_lines.qty` & `po_lines.unit_price` can change only while `purchase_orders.status='DRAFT'` and **no** non‑VOID invoice exists for that PO.
 
 ## Optional: DB‑level enforcement snippets (RLS + security‑barrier view)
 

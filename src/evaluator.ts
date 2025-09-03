@@ -25,7 +25,9 @@ function initializeDatabase() {
       model_name TEXT NOT NULL,
       expected_result TEXT NOT NULL,
       actual_result TEXT NOT NULL,
-      explanation TEXT
+      explanation TEXT,
+      request JSON,
+      response JSON
     )
   `;
   db.exec(createTableSQL);
@@ -77,7 +79,12 @@ async function extractSpecPrompt(specPath: string): Promise<string | null> {
 }
 
 // Call OpenRouter API
-async function callOpenRouter(model: string, prompt: string): Promise<{ assessment: string; explanation: string } | null> {
+async function callOpenRouter(
+  model: string, 
+  specPrompt: string, 
+  evaluationPrompt: string, 
+  code: string
+): Promise<{ assessment: string; explanation: string; request: any; response: any } | null> {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) {
     console.error('OPENROUTER_API_KEY not found in environment variables');
@@ -89,6 +96,53 @@ async function callOpenRouter(model: string, prompt: string): Promise<{ assessme
 
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
+      const requestBody = {
+        model: model,
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a security expert evaluating code for vulnerabilities. You will be given a database schema, security requirements, and a code fragment to analyze.'
+          },
+          {
+            role: 'user',
+            content: specPrompt
+          },
+          {
+            role: 'user',
+            content: evaluationPrompt
+          },
+          {
+            role: 'user',
+            content: code
+          }
+        ],
+        response_format: {
+          type: 'json_schema',
+          json_schema: {
+            name: 'security_assessment',
+            strict: true,
+            schema: {
+              type: 'object',
+              properties: {
+                assessment: {
+                  type: 'string',
+                  enum: ['good', 'bad'],
+                  description: 'Whether the code is secure (good) or vulnerable (bad)'
+                },
+                explanation: {
+                  type: 'string',
+                  description: 'Explanation of the security assessment'
+                }
+              },
+              required: ['assessment', 'explanation'],
+              additionalProperties: false
+            }
+          }
+        },
+        temperature: 0.1,
+        max_tokens: 500
+      };
+
       const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -97,18 +151,7 @@ async function callOpenRouter(model: string, prompt: string): Promise<{ assessme
           'HTTP-Referer': 'https://github.com/security-bench',
           'X-Title': 'Security Benchmark Evaluator'
         },
-        body: JSON.stringify({
-          model: model,
-          messages: [
-            {
-              role: 'user',
-              content: prompt
-            }
-          ],
-          response_format: { type: 'json_object' },
-          temperature: 0.1,
-          max_tokens: 500
-        })
+        body: JSON.stringify(requestBody)
       });
 
       if (response.status === 429) {
@@ -125,8 +168,8 @@ async function callOpenRouter(model: string, prompt: string): Promise<{ assessme
         return null;
       }
 
-      const data = await response.json();
-      const content = data.choices[0]?.message?.content;
+      const responseData = await response.json();
+      const content = responseData.choices[0]?.message?.content;
       
       if (!content) {
         console.error('No content in OpenRouter response');
@@ -134,33 +177,20 @@ async function callOpenRouter(model: string, prompt: string): Promise<{ assessme
       }
 
       try {
-        // Handle potential JSON with newlines in strings
-        const cleanedContent = content.replace(/\n/g, ' ').replace(/\s+/g, ' ');
-        const result = JSON.parse(cleanedContent);
+        const result = JSON.parse(content);
         if (!result.assessment || !result.explanation) {
           console.error('Invalid response structure from model');
           return null;
         }
         return {
           assessment: result.assessment.toLowerCase(),
-          explanation: result.explanation
+          explanation: result.explanation,
+          request: requestBody,
+          response: responseData
         };
       } catch (parseError) {
-        // Try parsing the original content in case cleaning broke it
-        try {
-          const result = JSON.parse(content);
-          if (!result.assessment || !result.explanation) {
-            console.error('Invalid response structure from model');
-            return null;
-          }
-          return {
-            assessment: result.assessment.toLowerCase(),
-            explanation: result.explanation
-          };
-        } catch (secondError) {
-          console.error('Failed to parse JSON response:', content.substring(0, 200));
-          return null;
-        }
+        console.error('Failed to parse JSON response:', content.substring(0, 200));
+        return null;
       }
     } catch (error) {
       console.error(`Error calling OpenRouter API (attempt ${attempt + 1}):`, error);
@@ -186,25 +216,30 @@ async function processTestFile(
     return;
   }
 
-  // Construct the full prompt
-  const fullPrompt = `${specPrompt}\n\n${evaluationPrompt}\n\n${testData.code}`;
-
-  // Call the LLM
+  // Call the LLM with structured messages
   console.log(`Processing ${basename(testFilePath)}...`);
-  const result = await callOpenRouter(model, fullPrompt);
+  const result = await callOpenRouter(model, specPrompt, evaluationPrompt, testData.code);
   
   if (!result) {
     console.error(`Failed to get result for ${testFilePath}`);
     return;
   }
 
-  // Store in database
+  // Store in database with request and response
   const stmt = db.prepare(`
-    INSERT INTO evaluations (test_file, model_name, expected_result, actual_result, explanation)
-    VALUES (?, ?, ?, ?, ?)
+    INSERT INTO evaluations (test_file, model_name, expected_result, actual_result, explanation, request, response)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
   `);
   
-  stmt.run(testFilePath, model, testData.expected, result.assessment, result.explanation);
+  stmt.run(
+    testFilePath, 
+    model, 
+    testData.expected, 
+    result.assessment, 
+    result.explanation,
+    JSON.stringify(result.request),
+    JSON.stringify(result.response)
+  );
   
   const success = result.assessment === testData.expected;
   console.log(`  ${success ? '✓' : '✗'} Expected: ${testData.expected}, Got: ${result.assessment}`);
