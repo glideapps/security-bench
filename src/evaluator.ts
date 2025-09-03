@@ -82,7 +82,8 @@ async function callOpenRouter(
   model: string, 
   specPrompt: string, 
   evaluationPrompt: string, 
-  code: string
+  code: string,
+  previousEvaluations?: Array<{model_name: string; actual_result: string; explanation: string}>
 ): Promise<{ assessment: string; explanation: string; request: any; response: any } | null> {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) {
@@ -95,26 +96,47 @@ async function callOpenRouter(
 
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
+      // Build messages array
+      const messages: any[] = [
+        {
+          role: 'system',
+          content: 'You are a security expert evaluating code for vulnerabilities. You will be given a database schema, security requirements, and a code fragment to analyze.'
+        },
+        {
+          role: 'user',
+          content: specPrompt
+        }
+      ];
+      
+      // Add previous evaluations as separate messages if available
+      if (previousEvaluations && previousEvaluations.length > 0) {
+        messages.push({
+          role: 'user',
+          content: 'Here are previous evaluations of this code by other models for context:'
+        });
+        
+        for (const prev of previousEvaluations) {
+          messages.push({
+            role: 'user',
+            content: `${prev.model_name} assessed it as ${prev.actual_result}: ${prev.explanation}`
+          });
+        }
+      }
+      
+      // Add the evaluation prompt and code
+      messages.push({
+        role: 'user',
+        content: evaluationPrompt
+      });
+      
+      messages.push({
+        role: 'user',
+        content: code
+      });
+      
       const requestBody = {
         model: model,
-        messages: [
-          {
-            role: 'system',
-            content: 'You are a security expert evaluating code for vulnerabilities. You will be given a database schema, security requirements, and a code fragment to analyze.'
-          },
-          {
-            role: 'user',
-            content: specPrompt
-          },
-          {
-            role: 'user',
-            content: evaluationPrompt
-          },
-          {
-            role: 'user',
-            content: code
-          }
-        ],
+        messages: messages,
         response_format: {
           type: 'json_schema',
           json_schema: {
@@ -551,9 +573,22 @@ async function fixTestFile(model: string, testFileName: string): Promise<void> {
   const evaluationPromptPath = join(PROJECT_ROOT, 'evaluation-prompt.txt');
   const evaluationPrompt = await readFile(evaluationPromptPath, 'utf-8');
   
-  // Evaluate the current code
+  // Get previous evaluations from database for context
+  const previousEvals = db.prepare(`
+    SELECT DISTINCT model_name, actual_result, explanation 
+    FROM evaluations 
+    WHERE test_file = ? 
+    ORDER BY timestamp DESC
+    LIMIT 10
+  `).all(testFilePath) as Array<{model_name: string; actual_result: string; explanation: string}>;
+  
+  if (previousEvals && previousEvals.length > 0) {
+    console.log(`Found ${previousEvals.length} previous evaluations for context`);
+  }
+  
+  // Evaluate the current code with context
   console.log(`Evaluating with ${model}...`);
-  const result = await callOpenRouter(model, specPrompt, evaluationPrompt, testData.code);
+  const result = await callOpenRouter(model, specPrompt, evaluationPrompt, testData.code, previousEvals);
   
   if (!result) {
     console.error('Failed to get evaluation result');
@@ -654,7 +689,7 @@ Provide ONLY the corrected SQL code with the comment. Do not include any markdow
     await import('fs').then(fs => fs.promises.writeFile(testFilePath, updatedContent));
     console.log(`✓ Updated ${testFilePath} with corrected code`);
     
-    // Verify the fix by re-evaluating
+    // Verify the fix by re-evaluating (without previous context since code changed)
     console.log('\nVerifying the fix...');
     const verifyResult = await callOpenRouter(model, specPrompt, evaluationPrompt, newCode.trim());
     
