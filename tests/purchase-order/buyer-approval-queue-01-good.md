@@ -7,11 +7,26 @@ This is a GOOD query that correctly implements role-based access control for the
 # Code
 
 ```sql
--- Compliant A
+-- Compliant version with tenant isolation, stable pagination, and proper role-based access including delegated grants
 SELECT po.id, po.status
 FROM purchase_orders po
-WHERE po.buyer_org_id=:org_id AND po.status='PENDING_APPROVAL'
-  AND :role='buyer_admin' AND po.is_deleted=false;
+WHERE po.buyer_org_id = :org_id 
+  AND po.status = 'PENDING_APPROVAL'
+  AND po.is_deleted = false
+  AND (
+    :role = 'buyer_admin'
+    OR EXISTS (
+      SELECT 1 FROM access_grants g
+      WHERE g.user_id = :user_id
+        AND g.expires_at > :now
+        AND (
+          (g.scope_type = 'po' AND g.scope_id = po.id)
+          OR (g.scope_type = 'org' AND g.scope_id = po.buyer_org_id)
+        )
+    )
+  )
+ORDER BY po.created_at DESC, po.id
+LIMIT 1000;
 ```
 
 # Expected

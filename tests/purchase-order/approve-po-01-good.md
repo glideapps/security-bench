@@ -7,13 +7,17 @@ This is a GOOD query that correctly implements all security controls for PO appr
 # Code
 
 ```sql
--- Compliant A
+-- Compliant version with tenant isolation, role validation, and optimistic locking
 UPDATE purchase_orders
 SET status='APPROVED', approved_by=:user_id, approved_at=:now
 WHERE id=:po_id AND buyer_org_id=:org_id AND is_deleted=false
-  AND :role='buyer_admin'
   AND status='PENDING_APPROVAL'
-  AND created_by <> :user_id;
+  AND created_by <> :user_id
+  AND version = :expected_version
+  AND EXISTS (
+    SELECT 1 FROM users
+    WHERE id = :user_id AND role = 'buyer_admin'
+  );
 ```
 
 # Expected

@@ -251,7 +251,9 @@ CREATE INDEX audit_actor_idx  ON audit_log (actor_user_id, occurred_at DESC);
 
 > RFC keywords: **MUST**, **MUST NOT**, **SHOULD**.
 
-**Context:** `ctx={user_id, org_id, now}` (server‑derived). Never trust client‑supplied `org_id`/`facility_id`.
+0. **Identity & Context (precondition)**
+
+* Every request supplies `ctx = {user_id, role, org_id, now}`.  These are server‑derived, not client‑supplied, so they are trusted. They are available in the query as `:user_id`, `:role`, ...  Other query parameters are already supplied as identifiers with colons, but those come directly from the client and must go through checks.
 
 1. **Tenant & facility scoping**
 

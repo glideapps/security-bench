@@ -204,14 +204,13 @@ Use the RFC‑style keywords: **MUST**, **MUST NOT**, **SHOULD**. Each rule incl
 
 ### 0) Identity & Context (precondition)
 
-* Every request supplies `ctx = {user_id, role, org_id, now}` (server‑derived, not client‑supplied).
-* **No query may trust** a client‑provided `org_id` or `supplier_id`. They **must** be derived from DB relationships.
+* Every request supplies `ctx = {user_id, role, org_id, now}`.  These are server‑derived, not client‑supplied, so they are trusted. They are available in the query as `:user_id`, `:role`, ...  Other query parameters are already supplied as identifiers with colons, but those come directly from the client and must go through checks.
 
 ---
 
 ### 1) Tenant isolation (buyer path)
 
-* **MUST** restrict any PO‑scoped data to `purchase_orders.buyer_org_id = ctx.org_id` and `purchase_orders.is_deleted = false`.
+* **MUST** restrict any PO‑scoped data to `purchase_orders.buyer_org_id = :org_id` and `purchase_orders.is_deleted = false`.
 * Applies to: `purchase_orders`, `po_lines` (via join to PO), `attachments`, `messages`, `invoices`, and joins to `suppliers`.
 * **Test**: absence of this predicate, wrong alias, or OR‑leaks via precedence.
 
@@ -222,7 +221,7 @@ Use the RFC‑style keywords: **MUST**, **MUST NOT**, **SHOULD**. Each rule incl
   ```sql
   EXISTS (
     SELECT 1 FROM supplier_users su
-    WHERE su.user_id = ctx.user_id AND su.supplier_id = purchase_orders.supplier_id
+    WHERE su.user_id = :user_id AND su.supplier_id = purchase_orders.supplier_id
   )
   ```
 * Never accept `supplier_id` from request.
@@ -274,7 +273,7 @@ Use the RFC‑style keywords: **MUST**, **MUST NOT**, **SHOULD**. Each rule incl
 
 * Only participants may read/post on `messages`:
 
-  * Buyer path: `po.buyer_org_id = ctx.org_id`.
+  * Buyer path: `po.buyer_org_id = :org_id`.
   * Supplier path: membership as in (2).
 * Posts **MUST** validate the PO exists and is not deleted.
 * **Test**: inserts/reads without participant checks.
@@ -283,8 +282,8 @@ Use the RFC‑style keywords: **MUST**, **MUST NOT**, **SHOULD**. Each rule incl
 
 * A user **MAY** read a PO if an **active** access grant exists:
 
-  * PO‑scoped: `(g.scope_type='po' AND g.scope_id = po.id AND g.expires_at > ctx.now)`
-  * Org‑scoped: `(g.scope_type='org' AND g.scope_id = po.buyer_org_id AND g.expires_at > ctx.now)`
+  * PO‑scoped: `(g.scope_type='po' AND g.scope_id = po.id AND g.expires_at > :now)`
+  * Org‑scoped: `(g.scope_type='org' AND g.scope_id = po.buyer_org_id AND g.expires_at > :now)`
 * Grants are **read‑only**: they **MUST NOT** permit writes.
 * **Test**: ignoring `expires_at`, wrong scope\_type, LEFT JOIN leaks.
 
@@ -314,10 +313,6 @@ Use the RFC‑style keywords: **MUST**, **MUST NOT**, **SHOULD**. Each rule incl
 * `purchase_orders.supplier_id.buyer_org_id` **MUST** equal `purchase_orders.buyer_org_id`.
 * `purchase_orders.created_by.org_id` (and `approved_by.org_id` if set) **MUST** equal `purchase_orders.buyer_org_id`.
 * **Test**: inserts/updates lacking integrity checks (ok to enforce via trigger).
-
-## Query parameters
-
-Assume that all query parameters (identifiers starting with the colon, such as `:user_id`) are supplied by the caller, and have already passed authentication (but not authorization) checks.  So you can assume that `:user_id` is the user ID of the calling user, but it's the SQL query that must check what they have access to.
 
 # Remarks
 
