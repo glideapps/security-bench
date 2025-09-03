@@ -312,21 +312,191 @@ async function evaluate(model: string, filter?: string): Promise<void> {
   console.log('\nEvaluation complete!');
 }
 
+// Helper function to sanitize filenames for use as HTML files
+function sanitizeFilename(filename: string): string {
+  return filename.replace(/[^a-z0-9-]/gi, '_').toLowerCase();
+}
+
+// Generate individual test page
+async function generateTestPage(
+  testFile: string, 
+  evaluations: any[], 
+  reportDir: string,
+  appName: string
+): Promise<string> {
+  // Read the test file content
+  let testContent = '';
+  let testDescription = '';
+  let testCode = '';
+  let testExpected = '';
+  
+  try {
+    const content = await readFile(testFile, 'utf-8');
+    testContent = content;
+    
+    // Extract sections
+    const descMatch = content.match(/# Description\s*\n([\s\S]*?)(?=\n# |$)/i);
+    testDescription = descMatch ? descMatch[1].trim() : 'No description';
+    
+    const codeMatch = content.match(/# Code\s*\n\s*```(?:\w+)?\s*\n([\s\S]*?)\n```/i);
+    testCode = codeMatch ? codeMatch[1].trim() : 'No code found';
+    
+    const expectedMatch = content.match(/# Expected\s*\n\s*(good|bad)/i);
+    testExpected = expectedMatch ? expectedMatch[1].toLowerCase() : 'unknown';
+  } catch (error) {
+    console.error(`Error reading test file ${testFile}:`, error);
+  }
+  
+  const fileName = testFile.split('/').pop() || 'unknown';
+  const sanitizedName = sanitizeFilename(fileName.replace('.md', ''));
+  
+  // Create app subdirectory
+  const appDir = join(reportDir, appName);
+  await import('fs').then(fs => fs.promises.mkdir(appDir, { recursive: true }));
+  
+  // File path relative to app directory
+  const htmlFileName = `${appName}/${sanitizedName}.html`;
+  
+  let html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>${fileName} - Test Details</title>
+  <style>
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; background: #f5f5f5; }
+    .container { max-width: 1400px; margin: 0 auto; background: white; padding: 20px 40px; min-height: 100vh; }
+    h1 { color: #333; border-bottom: 3px solid #007acc; padding-bottom: 15px; margin-bottom: 30px; }
+    h2 { color: #555; margin-top: 40px; border-bottom: 1px solid #e0e0e0; padding-bottom: 10px; }
+    .back-link { display: inline-block; margin-bottom: 20px; color: #007acc; text-decoration: none; }
+    .back-link:hover { text-decoration: underline; }
+    .metadata { background: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0; }
+    .metadata p { margin: 5px 0; }
+    .code-section { background: #f4f4f4; padding: 20px; border-radius: 5px; margin: 20px 0; border-left: 4px solid #007acc; }
+    .code-block { background: #282c34; color: #abb2bf; padding: 15px; border-radius: 5px; overflow-x: auto; font-family: 'Courier New', monospace; font-size: 14px; }
+    .description { background: #fff9e6; padding: 15px; border-radius: 5px; margin: 20px 0; border-left: 4px solid #ffc107; }
+    .expected-good { color: green; font-weight: bold; }
+    .expected-bad { color: red; font-weight: bold; }
+    .evaluation { border: 1px solid #ddd; padding: 20px; margin: 20px 0; border-radius: 8px; background: #fafafa; }
+    .evaluation-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 2px solid #e0e0e0; }
+    .model-name { font-size: 18px; font-weight: bold; color: #333; }
+    .result-badge { padding: 5px 10px; border-radius: 20px; font-weight: bold; }
+    .result-correct { background: #d4f8d4; color: green; }
+    .result-incorrect { background: #f8d4d4; color: red; }
+    .evaluation-details { margin-top: 15px; }
+    .detail-row { margin: 10px 0; display: flex; align-items: flex-start; }
+    .detail-label { font-weight: bold; width: 120px; color: #666; }
+    .detail-value { flex: 1; }
+    .explanation { background: white; padding: 15px; border-radius: 5px; margin-top: 10px; border-left: 3px solid #007acc; }
+    details { margin: 15px 0; }
+    summary { cursor: pointer; padding: 10px; background: #e8e8e8; border-radius: 3px; font-weight: bold; }
+    summary:hover { background: #d8d8d8; }
+    .json-content { background: #282c34; color: #abb2bf; padding: 15px; border-radius: 5px; overflow-x: auto; font-family: 'Courier New', monospace; font-size: 12px; margin-top: 10px; max-height: 400px; overflow-y: auto; }
+    .no-evaluations { text-align: center; padding: 40px; color: #999; font-style: italic; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <a href="../index.html" class="back-link">← Back to Report</a>
+    <h1>${fileName}</h1>
+    
+    <div class="metadata">
+      <p><strong>Expected Result:</strong> <span class="expected-${testExpected}">${testExpected}</span></p>
+      <p><strong>Total Evaluations:</strong> ${evaluations.length}</p>
+      <p><strong>Path:</strong> ${testFile}</p>
+    </div>
+    
+    <h2>Description</h2>
+    <div class="description">
+      ${testDescription.replace(/\n/g, '<br>')}
+    </div>
+    
+    <h2>Code</h2>
+    <div class="code-section">
+      <pre class="code-block">${testCode.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>
+    </div>
+    
+    <h2>Evaluations</h2>`;
+  
+  if (evaluations.length === 0) {
+    html += `<div class="no-evaluations">No evaluations have been run for this test file yet.</div>`;
+  } else {
+    for (const evaluation of evaluations) {
+      const correct = evaluation.expected_result === evaluation.actual_result;
+      const timestamp = new Date(evaluation.timestamp).toLocaleString();
+      
+      html += `
+    <div class="evaluation">
+      <div class="evaluation-header">
+        <div class="model-name">${evaluation.model_name}</div>
+        <div class="result-badge ${correct ? 'result-correct' : 'result-incorrect'}">
+          ${correct ? '✓ PASS' : '✗ FAIL'} (Got: ${evaluation.actual_result})
+        </div>
+      </div>
+      
+      <div class="evaluation-details">
+        <div class="detail-row">
+          <div class="detail-label">Timestamp:</div>
+          <div class="detail-value">${timestamp}</div>
+        </div>
+        
+        <div class="detail-row">
+          <div class="detail-label">Assessment:</div>
+          <div class="detail-value">${evaluation.actual_result}</div>
+        </div>
+        
+        ${evaluation.explanation ? `
+        <div class="detail-row">
+          <div class="detail-label">Explanation:</div>
+          <div class="detail-value">
+            <div class="explanation">${evaluation.explanation}</div>
+          </div>
+        </div>` : ''}
+        
+        <details>
+          <summary>View Request JSON</summary>
+          <pre class="json-content">${JSON.stringify(JSON.parse(evaluation.request || '{}'), null, 2)}</pre>
+        </details>
+        
+        <details>
+          <summary>View Response JSON</summary>
+          <pre class="json-content">${JSON.stringify(JSON.parse(evaluation.response || '{}'), null, 2)}</pre>
+        </details>
+      </div>
+    </div>`;
+    }
+  }
+  
+  html += `
+  </div>
+</body>
+</html>`;
+  
+  const testPagePath = join(appDir, `${sanitizedName}.html`);
+  await import('fs').then(fs => fs.promises.writeFile(testPagePath, html));
+  
+  return htmlFileName;
+}
+
 // Generate HTML report
 async function generateReport(): Promise<void> {
-  const reportDir = join(PROJECT_ROOT, 'reports');
+  // Create timestamped report directory
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  const reportDir = join(PROJECT_ROOT, 'reports', timestamp);
   await import('fs').then(fs => fs.promises.mkdir(reportDir, { recursive: true }));
+  
+  console.log(`Generating report in ${reportDir}...`);
   
   // Query all results
   const allResults = db.prepare(`
     SELECT * FROM evaluations
-    ORDER BY timestamp DESC, test_file
+    ORDER BY test_file, model_name, timestamp DESC
   `).all();
   
-  // Group by model
+  // Group by model, test file, and application
   const byModel: Record<string, any[]> = {};
-  // Group by application
+  const byTestFile: Record<string, any[]> = {};
   const byApp: Record<string, any[]> = {};
+  const testFilePages: Record<string, string> = {}; // Maps test file path to HTML filename
   
   for (const result of allResults as any[]) {
     // Group by model
@@ -334,6 +504,12 @@ async function generateReport(): Promise<void> {
       byModel[result.model_name] = [];
     }
     byModel[result.model_name].push(result);
+    
+    // Group by test file
+    if (!byTestFile[result.test_file]) {
+      byTestFile[result.test_file] = [];
+    }
+    byTestFile[result.test_file].push(result);
     
     // Extract app name from path
     const pathParts = result.test_file.split('/');
@@ -347,6 +523,20 @@ async function generateReport(): Promise<void> {
     }
   }
   
+  // Generate individual test pages
+  console.log('Generating individual test pages...');
+  for (const [testFile, evaluations] of Object.entries(byTestFile)) {
+    // Extract app name from test file path
+    const pathParts = testFile.split('/');
+    const appIndex = pathParts.indexOf('tests');
+    const appName = (appIndex >= 0 && appIndex < pathParts.length - 1) 
+      ? pathParts[appIndex + 1] 
+      : 'unknown';
+    
+    const htmlFileName = await generateTestPage(testFile, evaluations, reportDir, appName);
+    testFilePages[testFile] = htmlFileName;
+  }
+  
   // Calculate statistics
   const modelStats: Record<string, { total: number; correct: number; percentage: number }> = {};
   for (const [model, results] of Object.entries(byModel)) {
@@ -358,9 +548,8 @@ async function generateReport(): Promise<void> {
     };
   }
   
-  // Generate HTML
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-  const reportPath = join(reportDir, `report_${timestamp}.html`);
+  // Generate main index HTML
+  const reportPath = join(reportDir, 'index.html');
   
   let html = `<!DOCTYPE html>
 <html>
@@ -368,53 +557,78 @@ async function generateReport(): Promise<void> {
   <meta charset="UTF-8">
   <title>Security Benchmark Report - ${timestamp}</title>
   <style>
-    body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
-    .container { max-width: 1200px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; }
-    h1 { color: #333; border-bottom: 2px solid #007acc; padding-bottom: 10px; }
-    h2 { color: #555; margin-top: 30px; }
-    .stats { background: #f0f8ff; padding: 15px; border-radius: 5px; margin: 20px 0; }
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; background: #f5f5f5; }
+    .container { max-width: 1400px; margin: 0 auto; background: white; padding: 20px 40px; min-height: 100vh; }
+    h1 { color: #333; border-bottom: 3px solid #007acc; padding-bottom: 15px; margin-bottom: 30px; }
+    h2 { color: #555; margin-top: 40px; border-bottom: 1px solid #e0e0e0; padding-bottom: 10px; }
+    .metadata { background: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0; }
+    .stats { background: #f0f8ff; padding: 20px; border-radius: 8px; margin: 30px 0; }
+    .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin-top: 20px; }
+    .stat-card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    .stat-card h3 { margin: 0 0 10px 0; color: #666; font-size: 16px; }
+    .stat-value { font-size: 32px; font-weight: bold; color: #007acc; }
+    .stat-detail { color: #888; margin-top: 5px; }
     table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-    th { background: #007acc; color: white; padding: 10px; text-align: left; }
-    td { padding: 8px; border-bottom: 1px solid #ddd; }
-    tr:hover { background: #f5f5f5; }
-    .correct { color: green; font-weight: bold; }
-    .incorrect { color: red; font-weight: bold; }
-    .model-section { margin: 30px 0; padding: 20px; background: #fafafa; border-radius: 5px; }
-    .percentage { font-size: 24px; font-weight: bold; }
-    .good { background: #d4f8d4; }
-    .bad { background: #f8d4d4; }
-    details { margin: 10px 0; }
-    summary { cursor: pointer; padding: 5px; background: #e8e8e8; border-radius: 3px; }
+    th { background: #007acc; color: white; padding: 12px; text-align: left; font-weight: 600; }
+    td { padding: 10px 12px; border-bottom: 1px solid #e0e0e0; }
+    tr:hover { background: #f8f9fa; }
+    .test-link { color: #007acc; text-decoration: none; font-weight: 500; }
+    .test-link:hover { text-decoration: underline; }
+    .correct { color: #28a745; font-weight: bold; }
+    .incorrect { color: #dc3545; font-weight: bold; }
+    .model-section { margin: 30px 0; padding: 25px; background: #fafafa; border-radius: 8px; border: 1px solid #e0e0e0; }
+    .model-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    .model-name { font-size: 20px; font-weight: bold; color: #333; }
+    .model-score { font-size: 28px; font-weight: bold; color: #007acc; }
+    .good { background: #d4f8d4; padding: 2px 6px; border-radius: 3px; }
+    .bad { background: #f8d4d4; padding: 2px 6px; border-radius: 3px; }
+    details { margin: 15px 0; }
+    summary { cursor: pointer; padding: 10px; background: #e8e8e8; border-radius: 5px; font-weight: 600; }
     summary:hover { background: #d8d8d8; }
-    .explanation { margin: 10px 20px; padding: 10px; background: #f9f9f9; border-left: 3px solid #007acc; }
+    .app-section { margin: 20px 0; padding: 20px; background: white; border-radius: 8px; border: 1px solid #ddd; }
   </style>
 </head>
 <body>
   <div class="container">
     <h1>Security Benchmark Evaluation Report</h1>
-    <p>Generated: ${new Date().toLocaleString()}</p>
+    
+    <div class="metadata">
+      <p><strong>Generated:</strong> ${new Date().toLocaleString()}</p>
+      <p><strong>Total Evaluations:</strong> ${allResults.length}</p>
+      <p><strong>Unique Test Files:</strong> ${Object.keys(byTestFile).length}</p>
+      <p><strong>Models Tested:</strong> ${Object.keys(byModel).length}</p>
+    </div>
     
     <div class="stats">
-      <h2>Overall Statistics</h2>`;
+      <h2>Overall Statistics</h2>
+      <div class="stat-grid">`;
   
   for (const [model, stats] of Object.entries(modelStats)) {
     html += `
-      <div class="model-section">
-        <h3>${model}</h3>
-        <p class="percentage">${stats.percentage.toFixed(1)}%</p>
-        <p>Correct: ${stats.correct} / ${stats.total}</p>
-      </div>`;
+        <div class="stat-card">
+          <h3>${model}</h3>
+          <div class="stat-value">${stats.percentage.toFixed(1)}%</div>
+          <div class="stat-detail">Correct: ${stats.correct} / ${stats.total}</div>
+        </div>`;
   }
   
-  html += `</div>`;
+  html += `
+      </div>
+    </div>`;
   
-  // Results by model
+  // Results by model with links to test pages
   html += `<h2>Results by Model</h2>`;
   for (const [model, results] of Object.entries(byModel)) {
     const stats = modelStats[model];
+    // Get unique test files for this model
+    const uniqueTestFiles = new Set(results.map(r => r.test_file));
+    
     html += `
     <div class="model-section">
-      <h3>${model} (${stats.percentage.toFixed(1)}% accuracy)</h3>
+      <div class="model-header">
+        <div class="model-name">${model}</div>
+        <div class="model-score">${stats.percentage.toFixed(1)}% (${stats.correct}/${stats.total})</div>
+      </div>
       <table>
         <thead>
           <tr>
@@ -422,19 +636,27 @@ async function generateReport(): Promise<void> {
             <th>Expected</th>
             <th>Actual</th>
             <th>Result</th>
+            <th>Details</th>
           </tr>
         </thead>
         <tbody>`;
     
-    for (const result of results) {
+    // Show unique test files only (latest evaluation per file)
+    for (const testFile of uniqueTestFiles) {
+      const result = results.find(r => r.test_file === testFile);
+      if (!result) continue;
+      
       const correct = result.expected_result === result.actual_result;
       const fileName = result.test_file.split('/').pop();
+      const testPageLink = testFilePages[result.test_file] || '#';
+      
       html += `
           <tr>
-            <td>${fileName}</td>
+            <td><a href="${testPageLink}" class="test-link">${fileName}</a></td>
             <td class="${result.expected_result}">${result.expected_result}</td>
             <td class="${result.actual_result}">${result.actual_result}</td>
             <td class="${correct ? 'correct' : 'incorrect'}">${correct ? '✓' : '✗'}</td>
+            <td><a href="${testPageLink}" class="test-link">View →</a></td>
           </tr>`;
     }
     
@@ -444,39 +666,45 @@ async function generateReport(): Promise<void> {
     </div>`;
   }
   
-  // Results by application
+  // Results by application with links
   html += `<h2>Results by Application</h2>`;
   for (const [app, results] of Object.entries(byApp)) {
     const correct = results.filter((r: any) => r.expected_result === r.actual_result).length;
     const percentage = results.length > 0 ? (correct / results.length) * 100 : 0;
     
+    // Get unique test files for this app
+    const uniqueTestFiles = new Set(results.map((r: any) => r.test_file));
+    
     html += `
-    <div class="model-section">
-      <h3>${app} (${percentage.toFixed(1)}% accuracy across all models)</h3>
+    <div class="app-section">
+      <h3>${app}</h3>
+      <p><strong>${percentage.toFixed(1)}%</strong> accuracy across all models (${correct}/${results.length} correct)</p>
       <details>
-        <summary>View Details (${correct}/${results.length} correct)</summary>
+        <summary>View ${uniqueTestFiles.size} Test Files</summary>
         <table>
           <thead>
             <tr>
               <th>Test File</th>
-              <th>Model</th>
-              <th>Expected</th>
-              <th>Actual</th>
-              <th>Result</th>
+              <th>Models Evaluated</th>
+              <th>Success Rate</th>
+              <th>Details</th>
             </tr>
           </thead>
           <tbody>`;
     
-    for (const result of results as any[]) {
-      const correct = result.expected_result === result.actual_result;
-      const fileName = result.test_file.split('/').pop();
+    for (const testFile of uniqueTestFiles) {
+      const fileResults = results.filter((r: any) => r.test_file === testFile);
+      const fileCorrect = fileResults.filter((r: any) => r.expected_result === r.actual_result).length;
+      const filePercentage = fileResults.length > 0 ? (fileCorrect / fileResults.length) * 100 : 0;
+      const fileName = testFile.split('/').pop();
+      const testPageLink = testFilePages[testFile] || '#';
+      
       html += `
             <tr>
-              <td>${fileName}</td>
-              <td>${result.model_name}</td>
-              <td class="${result.expected_result}">${result.expected_result}</td>
-              <td class="${result.actual_result}">${result.actual_result}</td>
-              <td class="${correct ? 'correct' : 'incorrect'}">${correct ? '✓' : '✗'}</td>
+              <td><a href="${testPageLink}" class="test-link">${fileName}</a></td>
+              <td>${fileResults.length}</td>
+              <td class="${filePercentage >= 50 ? 'correct' : 'incorrect'}">${filePercentage.toFixed(0)}%</td>
+              <td><a href="${testPageLink}" class="test-link">View →</a></td>
             </tr>`;
     }
     
@@ -493,7 +721,9 @@ async function generateReport(): Promise<void> {
 </html>`;
   
   await import('fs').then(fs => fs.promises.writeFile(reportPath, html));
-  console.log(`Report generated: ${reportPath}`);
+  console.log(`Report generated successfully!`);
+  console.log(`Main report: ${reportPath}`);
+  console.log(`Individual test pages: ${Object.keys(byTestFile).length} pages generated`);
 }
 
 // Main CLI entry point
