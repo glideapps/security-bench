@@ -7,7 +7,6 @@ This is a BAD query that could include soft-deleted purchase orders in the appro
 # Code
 
 ```sql
--- ❌4 (soft-delete ignored)
 -- SAFE: excludes deleted
 SELECT id FROM purchase_orders WHERE buyer_org_id=:org_id AND status='PENDING_APPROVAL';
 ```

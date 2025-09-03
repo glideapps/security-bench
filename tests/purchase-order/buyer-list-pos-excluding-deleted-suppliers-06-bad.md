@@ -3,7 +3,6 @@
 
 # Code
 ```sql
--- ❌4 (OR leak): Logic error bypasses both PO and supplier constraints
 -- SAFE: both PO and supplier constrained
 SELECT po.id FROM purchase_orders po
 JOIN suppliers s ON s.id=po.supplier_id

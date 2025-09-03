@@ -3,7 +3,6 @@
 
 # Code
 ```sql
--- ❌1 (supplier delete ignored): Includes POs with deleted suppliers
 -- SAFE: excludes soft-deleted suppliers
 SELECT po.id FROM purchase_orders po WHERE po.buyer_org_id=:org_id AND po.is_deleted=false;
 ```

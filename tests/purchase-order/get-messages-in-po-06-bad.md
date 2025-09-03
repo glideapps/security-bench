@@ -3,7 +3,6 @@ This is a non-compliant query (❌4) with misleading comments claiming "SAFE: ex
 
 # Code
 ```sql
--- ❌4 (soft-delete ignored)
 -- SAFE: excludes deleted messages
 SELECT id, body FROM messages WHERE po_id=:po_id;
 ```

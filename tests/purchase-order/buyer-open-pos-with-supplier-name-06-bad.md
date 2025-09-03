@@ -3,7 +3,6 @@
 
 # Code
 ```sql
--- ❌4 (LEFT JOIN supplier -> orphaned rows): Inconsistent supplier matching
 -- SAFE: inner join only
 SELECT po.id, s.legal_name FROM purchase_orders po
 LEFT JOIN suppliers s ON s.id=po.supplier_id

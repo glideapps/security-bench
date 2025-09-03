@@ -3,7 +3,6 @@ This is a non-compliant query (❌1) with misleading comments claiming "SAFE: re
 
 # Code
 ```sql
--- ❌1 (joins but no scope)
 -- SAFE: restricted to current user
 SELECT i.* FROM invoices i JOIN purchase_orders po ON po.id=i.po_id;
 ```

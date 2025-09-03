@@ -3,7 +3,6 @@
 
 # Code
 ```sql
--- ❌1 (no access check): Security vulnerability - allows unauthorized posting
 -- SAFE: only PO participants can post
 INSERT INTO messages (po_id, author_user_id, body) VALUES (:po_id, :user_id, :body);
 ```

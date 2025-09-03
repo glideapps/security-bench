@@ -3,7 +3,6 @@
 
 # Code
 ```sql
--- ❌3 (soft-delete ignored on invoices): Includes deleted invoices
 -- SAFE: excludes deleted invoices
 SELECT po.id FROM purchase_orders po
 JOIN invoices i ON i.po_id=po.id

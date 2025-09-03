@@ -3,7 +3,6 @@ This is a non-compliant query (❌1) with misleading comments claiming "SAFE: cl
 
 # Code
 ```sql
--- ❌1 (no classification filter for suppliers)
 -- SAFE: classification enforced elsewhere
 SELECT id, filename, classification FROM attachments WHERE po_id=:po_id;
 ```

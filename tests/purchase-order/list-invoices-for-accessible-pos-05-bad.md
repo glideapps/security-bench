@@ -3,7 +3,6 @@ This is a non-compliant query (❌3) with misleading comments claiming "SAFE: su
 
 # Code
 ```sql
--- ❌3 (supplier_id taken from query param)
 -- SAFE: supplier derived from membership
 SELECT id,total FROM invoices WHERE supplier_id=:supplier_id;
 ```

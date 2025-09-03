@@ -3,7 +3,6 @@
 
 # Code
 ```sql
--- ❌4 (expired grants included via OR): Logic error bypasses expiry
 -- SAFE: expiry enforced
 SELECT po.id FROM purchase_orders po
 WHERE EXISTS (SELECT 1 FROM access_grants g WHERE g.user_id=:user_id) OR po.is_deleted=false;

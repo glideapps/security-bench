@@ -3,7 +3,6 @@
 
 # Code
 ```sql
--- ❌3 (supplier_id taken from client): Trust boundary violation
 -- SAFE: derive supplier from membership
 SELECT id,status FROM purchase_orders
 WHERE supplier_id IN (:supplier_ids) AND created_at BETWEEN :from AND :to;

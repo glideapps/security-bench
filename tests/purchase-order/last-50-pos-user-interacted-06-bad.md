@@ -3,7 +3,6 @@
 
 # Code
 ```sql
--- ❌4 (ORDER/LIMIT before scope using subquery): Improper pagination scope
 -- SAFE: scope then paginate
 SELECT id FROM (
   SELECT id FROM purchase_orders ORDER BY updated_at DESC LIMIT 50

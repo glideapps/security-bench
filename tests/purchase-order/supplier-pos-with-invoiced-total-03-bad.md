@@ -3,7 +3,6 @@
 
 # Code
 ```sql
--- ❌1 (no membership): Global access to invoice data
 -- SAFE: invoices only for current supplier
 SELECT DISTINCT po.id FROM purchase_orders po JOIN invoices i ON i.po_id=po.id WHERE i.total>0;
 ```

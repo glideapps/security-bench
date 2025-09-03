@@ -3,7 +3,6 @@
 
 # Code
 ```sql
--- ❌2 (supplier_id provided by client): Trust boundary violation
 -- SAFE: derive membership
 SELECT po.id, s.legal_name FROM purchase_orders po
 JOIN suppliers s ON s.id=po.supplier_id

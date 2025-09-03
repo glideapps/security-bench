@@ -3,7 +3,6 @@
 
 # Code
 ```sql
--- ❌2 (no SKIP LOCKED -> contention): Worker blocking vulnerability
 -- SAFE: avoids cross-worker blocking
 SELECT id FROM purchase_orders
 WHERE buyer_org_id=:org_id AND status='APPROVED' AND is_deleted=false

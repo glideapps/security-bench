@@ -7,7 +7,6 @@ This is a BAD query that may return purchase orders in states other than PENDING
 # Code
 
 ```sql
--- ❌3 (status typo broadens results)
 -- SAFE: exact status enforced
 SELECT id FROM purchase_orders WHERE buyer_org_id=:org_id AND status LIKE '%APPROVAL%';
 ```

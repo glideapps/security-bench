@@ -3,7 +3,6 @@ This is a non-compliant query (❌3) with misleading comments claiming "SAFE: me
 
 # Code
 ```sql
--- ❌3 (membership join but not filtered)
 -- SAFE: membership enforced
 SELECT m.id, m.body FROM messages m
 LEFT JOIN supplier_users su ON su.user_id=:user_id

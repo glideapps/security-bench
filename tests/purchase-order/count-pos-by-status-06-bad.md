@@ -3,7 +3,6 @@
 
 # Code
 ```sql
--- ❌4 (OR precedence leak): Logic error bypasses membership validation
 -- SAFE: status counts for supplier only
 SELECT status, COUNT(*) FROM purchase_orders
 WHERE is_deleted=false AND EXISTS(SELECT 1 FROM supplier_users su WHERE su.user_id=:user_id) OR buyer_org_id=:org_id

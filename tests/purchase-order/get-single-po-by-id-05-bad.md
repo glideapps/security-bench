@@ -7,7 +7,6 @@ This is a BAD query that could expose soft-deleted purchase orders that should b
 # Code
 
 ```sql
--- ❌3 (soft-delete ignored)
 -- SAFE: excludes deleted
 SELECT id, status FROM purchase_orders WHERE id=:po_id;
 ```

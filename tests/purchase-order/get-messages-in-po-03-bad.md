@@ -3,7 +3,6 @@ This is a non-compliant query (❌1) with misleading comments claiming "SAFE: on
 
 # Code
 ```sql
--- ❌1 (no participation check)
 -- SAFE: only participants can view
 SELECT id, body FROM messages WHERE po_id=:po_id ORDER BY created_at;
 ```

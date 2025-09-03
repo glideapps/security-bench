@@ -3,7 +3,6 @@
 
 # Code
 ```sql
--- ❌1 (supplier join without buyer binding): Cross-tenant supplier data leak
 -- SAFE: suppliers constrained to buyer org
 SELECT po.id, s.legal_name FROM purchase_orders po JOIN suppliers s ON s.id=po.supplier_id
 WHERE po.buyer_org_id=:org_id AND po.is_deleted=false;

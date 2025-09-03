@@ -3,7 +3,6 @@
 
 # Code
 ```sql
--- ❌4 (soft-delete ignored): Includes deleted POs in export
 -- SAFE: excludes deleted
 SELECT id,status,created_at FROM purchase_orders
 WHERE buyer_org_id=:org_id AND created_at BETWEEN :from AND :to;

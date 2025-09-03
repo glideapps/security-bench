@@ -3,7 +3,6 @@
 
 # Code
 ```sql
--- ❌3 (soft-delete ignored): Includes deleted items
 -- SAFE: excludes deleted items
 SELECT DISTINCT po.id FROM purchase_orders po
 JOIN attachments a ON a.po_id=po.id

@@ -3,7 +3,6 @@ This is a non-compliant query (❌3) with misleading comments claiming "SAFE: pr
 
 # Code
 ```sql
--- ❌3 (wrong mask; null check bypass)
 -- SAFE: price masked for suppliers
 SELECT pl.id, pl.qty, (pl.unit_price * 1) AS unit_price
 FROM po_lines pl WHERE pl.po_id=:po_id;

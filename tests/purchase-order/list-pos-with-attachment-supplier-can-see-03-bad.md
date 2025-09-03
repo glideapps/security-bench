@@ -3,7 +3,6 @@
 
 # Code
 ```sql
--- ❌1 (classification ignored): Exposes confidential attachments
 -- SAFE: only supplier_visible/public
 SELECT DISTINCT po.id FROM purchase_orders po
 JOIN attachments a ON a.po_id=po.id

@@ -3,7 +3,6 @@
 
 # Code
 ```sql
--- ❌2 (LEFT JOIN + WHERE on supplier optional): Inconsistent supplier filtering
 -- SAFE: inner semantics enforced
 SELECT po.id FROM purchase_orders po
 LEFT JOIN suppliers s ON s.id=po.supplier_id

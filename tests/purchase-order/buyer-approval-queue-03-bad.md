@@ -7,7 +7,6 @@ This is a BAD query that could expose the approval queue to non-admin users.
 # Code
 
 ```sql
--- ❌1 (role check missing)
 -- SAFE: admin-only list
 SELECT id FROM purchase_orders WHERE buyer_org_id=:org_id AND status='PENDING_APPROVAL';
 ```

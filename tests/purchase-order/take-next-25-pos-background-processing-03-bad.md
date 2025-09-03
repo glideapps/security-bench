@@ -3,7 +3,6 @@
 
 # Code
 ```sql
--- ❌1 (no tenant filter; locks cross-tenant): Cross-tenant processing vulnerability
 -- SAFE: locked within org
 SELECT id FROM purchase_orders WHERE status='APPROVED'
 FOR UPDATE SKIP LOCKED LIMIT 25;

@@ -3,7 +3,6 @@
 
 # Code
 ```sql
--- ❌1 (ignores expiry): Allows access via expired grants
 -- SAFE: only active grants
 SELECT po.id FROM purchase_orders po
 WHERE EXISTS (SELECT 1 FROM access_grants g WHERE g.user_id=:user_id);

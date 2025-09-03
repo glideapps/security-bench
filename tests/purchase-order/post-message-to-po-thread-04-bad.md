@@ -3,7 +3,6 @@
 
 # Code
 ```sql
--- ❌2 (org-only, leaks across counterparty): Overly permissive access
 -- SAFE: strict participant check
 INSERT INTO messages (po_id, author_user_id, body)
 SELECT :po_id, :user_id, :body WHERE :org_id IS NOT NULL;

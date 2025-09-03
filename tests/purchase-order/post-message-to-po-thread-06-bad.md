@@ -3,7 +3,6 @@
 
 # Code
 ```sql
--- ❌4 (posts to deleted PO): Ignores soft-delete integrity
 -- SAFE: excludes soft-deleted POs
 INSERT INTO messages (po_id, author_user_id, body)
 SELECT :po_id, :user_id, :body

@@ -7,7 +7,6 @@ This is a BAD query that could approve POs in any state, violating workflow rule
 # Code
 
 ```sql
--- ❌1 (no state guard)
 -- SAFE: only from PENDING_APPROVAL
 UPDATE purchase_orders SET status='APPROVED' WHERE id=:po_id AND buyer_org_id=:org_id;
 ```

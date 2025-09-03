@@ -3,7 +3,6 @@ This is a non-compliant query (❌4) with misleading comments claiming "SAFE: st
 
 # Code
 ```sql
--- ❌4 (tenant filter on PO but not for suppliers)
 -- SAFE: strictly tenant-scoped
 SELECT pl.id, pl.qty FROM po_lines pl
 JOIN purchase_orders po ON po.id=pl.po_id

@@ -3,7 +3,6 @@
 
 # Code
 ```sql
--- ❌3 (soft-delete ignored): Includes deleted POs in counts
 -- SAFE: excludes deleted
 SELECT status, COUNT(*) FROM purchase_orders WHERE buyer_org_id=:org_id GROUP BY status;
 ```

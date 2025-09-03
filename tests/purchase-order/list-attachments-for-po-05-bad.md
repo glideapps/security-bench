@@ -3,7 +3,6 @@ This is a non-compliant query (❌3) with misleading comments claiming "SAFE: te
 
 # Code
 ```sql
--- ❌3 (org filter only, ignores supplier classification)
 -- SAFE: tenant + classification covered
 SELECT a.id, a.filename FROM attachments a
 JOIN purchase_orders po ON po.id=a.po_id

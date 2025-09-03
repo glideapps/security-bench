@@ -3,7 +3,6 @@ This is a non-compliant query (❌4) with misleading comments claiming "SAFE: pu
 
 # Code
 ```sql
--- ❌4 (misgrouped OR lets all classifications through)
 -- SAFE: public or supplier_visible only
 SELECT a.id FROM attachments a
 WHERE a.po_id=:po_id AND a.is_deleted=false

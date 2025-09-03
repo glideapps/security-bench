@@ -3,7 +3,6 @@
 
 # Code
 ```sql
--- ❌2 (no limit): Resource exhaustion risk
 -- SAFE: capped export
 SELECT id,status,created_at FROM purchase_orders
 WHERE buyer_org_id=:org_id AND is_deleted=false AND created_at BETWEEN :from AND :to

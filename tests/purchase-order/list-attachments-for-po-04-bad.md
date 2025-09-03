@@ -3,7 +3,6 @@ This is a non-compliant query (❌2) with misleading comments claiming "SAFE: su
 
 # Code
 ```sql
--- ❌2 (left join membership leak)
 -- SAFE: supplier membership verified
 SELECT a.id, a.filename FROM attachments a
 LEFT JOIN supplier_users su ON su.user_id=:user_id

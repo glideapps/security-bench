@@ -3,7 +3,6 @@
 
 # Code
 ```sql
--- ❌2 (supplier_id from request): Trust boundary violation
 -- SAFE: server-side membership
 SELECT po.id FROM purchase_orders po
 JOIN invoices i ON i.po_id=po.id

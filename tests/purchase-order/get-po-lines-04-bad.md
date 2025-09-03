@@ -3,7 +3,6 @@ This is a non-compliant query (❌2) with misleading comments claiming "SAFE: jo
 
 # Code
 ```sql
--- ❌2 (membership missing on join)
 -- SAFE: joined to PO so access is enforced
 SELECT pl.id, pl.qty, pl.unit_price
 FROM po_lines pl JOIN purchase_orders po ON po.id=pl.po_id

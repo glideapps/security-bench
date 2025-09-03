@@ -7,7 +7,6 @@ This is a BAD query that violates separation of duties principle.
 # Code
 
 ```sql
--- ❌3 (no maker–checker)
 -- SAFE: approver must differ from creator
 UPDATE purchase_orders SET status='APPROVED', approved_by=:user_id
 WHERE id=:po_id AND buyer_org_id=:org_id AND status='PENDING_APPROVAL';

@@ -3,7 +3,6 @@
 
 # Code
 ```sql
--- ❌2 (status broad via LIKE): Includes unintended statuses
 -- SAFE: explicit open statuses
 SELECT po.id, s.legal_name FROM purchase_orders po
 JOIN suppliers s ON s.id=po.supplier_id AND s.is_deleted=false

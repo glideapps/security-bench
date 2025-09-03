@@ -7,7 +7,6 @@ This is a BAD query that could allow enumeration of large datasets without prope
 # Code
 
 ```sql
--- ❌4 (no limit): enumeration risk
 -- SAFE: limited and ordered
 SELECT id, status FROM purchase_orders po
 WHERE po.buyer_org_id=:org_id AND po.is_deleted=false

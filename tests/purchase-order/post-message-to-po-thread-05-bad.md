@@ -3,7 +3,6 @@
 
 # Code
 ```sql
--- ❌3 (supplier_id from client): Trust boundary violation
 -- SAFE: supplier verified
 INSERT INTO messages (po_id, author_user_id, body)
 SELECT :po_id, :user_id, :body

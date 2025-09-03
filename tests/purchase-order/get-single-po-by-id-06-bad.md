@@ -7,7 +7,6 @@ This is a BAD query because the NULLIF creates NULL values that break the NOT IN
 # Code
 
 ```sql
--- ❌4 (membership via NOT IN w/NULL trap)
 -- SAFE: supplier membership check via NOT IN
 SELECT id, status FROM purchase_orders
 WHERE id=:po_id AND supplier_id NOT IN (

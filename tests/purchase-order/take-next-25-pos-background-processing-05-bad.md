@@ -3,7 +3,6 @@
 
 # Code
 ```sql
--- ❌3 (status too broad): Processes inappropriate PO states
 -- SAFE: only APPROVED
 SELECT id FROM purchase_orders WHERE buyer_org_id=:org_id AND is_deleted=false
 FOR UPDATE SKIP LOCKED LIMIT 25;

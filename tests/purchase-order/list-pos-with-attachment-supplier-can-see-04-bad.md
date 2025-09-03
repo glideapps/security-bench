@@ -3,7 +3,6 @@
 
 # Code
 ```sql
--- ❌2 (membership missing): Global access to supplier attachments
 -- SAFE: supplier-only access
 SELECT DISTINCT po.id FROM purchase_orders po
 JOIN attachments a ON a.po_id=po.id

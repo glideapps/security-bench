@@ -3,7 +3,6 @@ This is a non-compliant query (❌1) with misleading comments claiming "SAFE: ex
 
 # Code
 ```sql
--- ❌1 (SELECT * exposes unit_price)
 -- SAFE: excludes sensitive columns
 SELECT * FROM po_lines WHERE po_id=:po_id;
 ```

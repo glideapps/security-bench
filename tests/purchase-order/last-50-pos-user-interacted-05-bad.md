@@ -3,7 +3,6 @@
 
 # Code
 ```sql
--- ❌3 (soft-delete ignored): Includes deleted POs and messages
 -- SAFE: excludes deleted POs/messages
 SELECT DISTINCT po.id FROM purchase_orders po
 LEFT JOIN messages m ON m.po_id=po.id AND m.author_user_id=:user_id

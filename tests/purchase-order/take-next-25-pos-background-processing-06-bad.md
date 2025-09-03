@@ -3,7 +3,6 @@
 
 # Code
 ```sql
--- ❌4 (ORDER BY id -> starves newest): Unfair processing order
 -- SAFE: consistent priority ordering
 SELECT id FROM purchase_orders
 WHERE buyer_org_id=:org_id AND status='APPROVED' AND is_deleted=false

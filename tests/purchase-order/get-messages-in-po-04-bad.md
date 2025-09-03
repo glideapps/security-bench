@@ -3,7 +3,6 @@ This is a non-compliant query (❌2) with misleading comments claiming "SAFE: te
 
 # Code
 ```sql
--- ❌2 (ORG-only, leaks to buyers of same org even if PO isn't theirs)
 -- SAFE: tenant-checked thread
 SELECT m.id, m.body FROM messages m
 JOIN users u ON u.id=:user_id

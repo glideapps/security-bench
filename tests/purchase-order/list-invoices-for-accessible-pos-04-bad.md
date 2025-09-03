@@ -3,7 +3,6 @@ This is a non-compliant query (❌2) with misleading comments claiming "SAFE: bo
 
 # Code
 ```sql
--- ❌2 (filters by org only; supplier path forgotten)
 -- SAFE: both parties respected
 SELECT i.id,i.total FROM invoices i
 JOIN purchase_orders po ON po.id=i.po_id

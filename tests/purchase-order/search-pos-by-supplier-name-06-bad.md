@@ -3,7 +3,6 @@
 
 # Code
 ```sql
--- ❌4 (unbounded results): Resource exhaustion and data harvesting risk
 -- SAFE: limited
 SELECT po.id, s.legal_name FROM purchase_orders po
 JOIN suppliers s ON s.id=po.supplier_id

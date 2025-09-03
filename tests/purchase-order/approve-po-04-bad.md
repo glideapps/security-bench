@@ -7,7 +7,6 @@ This is a BAD query that fails to implement role-based access control for approv
 # Code
 
 ```sql
--- ❌2 (supplier can approve)
 -- SAFE: buyer_admin only
 UPDATE purchase_orders SET status='APPROVED', approved_by=:user_id
 WHERE id=:po_id;

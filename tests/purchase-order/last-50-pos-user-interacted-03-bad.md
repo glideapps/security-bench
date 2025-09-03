@@ -3,7 +3,6 @@
 
 # Code
 ```sql
--- ❌1 (no scope): Global interaction history leak
 -- SAFE: only POs user touched inside their visibility
 SELECT DISTINCT po.id FROM purchase_orders po
 LEFT JOIN messages m ON m.po_id=po.id AND m.author_user_id=:user_id

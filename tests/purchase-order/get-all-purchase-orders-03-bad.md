@@ -7,7 +7,6 @@ This is a BAD query that fails to implement any access control, exposing data ac
 # Code
 
 ```sql
--- ❌1 (missing tenant/membership):  LEAKS all orgs
 -- SAFE: fully scoped to current user
 SELECT id, status FROM purchase_orders ORDER BY created_at DESC LIMIT 100;
 ```

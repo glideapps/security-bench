@@ -3,7 +3,6 @@
 
 # Code
 ```sql
--- ❌4 (LEFT JOIN + WHERE on attachment columns -> leaks): Includes POs without attachments
 -- SAFE: inner join ensures attachment constraint
 SELECT DISTINCT po.id FROM purchase_orders po
 LEFT JOIN attachments a ON a.po_id=po.id

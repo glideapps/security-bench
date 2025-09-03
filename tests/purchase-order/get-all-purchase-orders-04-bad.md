@@ -7,7 +7,6 @@ This is a BAD query where the LEFT JOIN without proper WHERE clause filtering al
 # Code
 
 ```sql
--- ❌2 (LEFT JOIN membership bug):  NULLs leak rows
 -- SAFE: supplier scoping enforced via join
 SELECT po.id, po.status
 FROM purchase_orders po

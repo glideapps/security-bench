@@ -3,7 +3,6 @@
 
 # Code
 ```sql
--- ❌1 (no scope): Global export vulnerability
 -- SAFE: export limited to current user
 SELECT id,status,created_at FROM purchase_orders
 WHERE created_at BETWEEN :from AND :to;

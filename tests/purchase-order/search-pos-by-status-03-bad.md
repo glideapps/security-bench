@@ -3,7 +3,6 @@ This is a non-compliant query (❌1) with misleading comments claiming "SAFE: te
 
 # Code
 ```sql
--- ❌1 (status search across all tenants)
 -- SAFE: tenant-scoped search
 SELECT id, status FROM purchase_orders WHERE status = ANY(:statuses) LIMIT 200;
 ```
