@@ -1,0 +1,18 @@
+{
+  "name": "security-bench",
+  "version": "1.0.0",
+  "description": "Security Benchmark Evaluator for LLM Code Analysis",
+  "type": "module",
+  "scripts": {
+    "evaluate": "node --experimental-strip-types src/evaluator.ts",
+    "report": "node --experimental-strip-types src/evaluator.ts --report"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.5.0",
+    "dotenv": "^16.4.7"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.11",
+    "@types/node": "^22.10.2"
+  }
+}

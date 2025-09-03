@@ -1,0 +1,17 @@
+Analyze the following code fragment carefully against the security requirements specified above. 
+
+Evaluate whether this code properly implements the security controls and access restrictions described in the specification. Consider potential vulnerabilities including but not limited to:
+- SQL injection
+- Unauthorized data access
+- Cross-tenant data leakage
+- Missing access control checks
+- Improper handling of soft-deleted records
+- Exposure of sensitive fields
+- Missing pagination limits
+- Incorrect permission validations
+
+Respond with a JSON object containing exactly two fields:
+1. "assessment": either "good" (secure/compliant) or "bad" (vulnerable/non-compliant)
+2. "explanation": a brief explanation of your reasoning
+
+Here is the code to evaluate:
