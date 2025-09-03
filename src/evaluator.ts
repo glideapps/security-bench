@@ -3,6 +3,7 @@ import Database from 'better-sqlite3';
 import { readFile, readdir } from 'fs/promises';
 import { join, basename, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import pLimit from 'p-limit';
 
 // Load environment variables
 config();
@@ -308,15 +309,23 @@ async function processApplication(appDir: string, model: string, evaluationPromp
     console.log(`  Filtered to ${testFiles.length} files matching "${filter}"`);
   }
   
-  for (const testFile of testFiles) {
+  // Create a limit for concurrent processing (max 5 concurrent requests)
+  const limit = pLimit(5);
+  
+  // Process test files concurrently with limit
+  const promises = testFiles.map(testFile => {
     const testFilePath = join(appDir, testFile);
-    await processTestFile(testFilePath, specPrompt, evaluationPrompt, model);
-  }
+    return limit(() => processTestFile(testFilePath, specPrompt, evaluationPrompt, model));
+  });
+  
+  // Wait for all tests to complete
+  await Promise.all(promises);
 }
 
 // Main evaluation function
 async function evaluate(model: string, filter?: string): Promise<void> {
   console.log(`Starting evaluation with model: ${model}`);
+  console.log(`Using up to 5 concurrent API requests`);
   if (filter) {
     console.log(`Filter: "${filter}"`);
   }
@@ -329,6 +338,8 @@ async function evaluate(model: string, filter?: string): Promise<void> {
   const testsDir = join(PROJECT_ROOT, 'tests');
   const apps = await readdir(testsDir);
   
+  // Process applications sequentially to maintain clear console output
+  // But files within each app are processed concurrently
   for (const app of apps) {
     const appDir = join(testsDir, app);
     const stats = await import('fs').then(fs => fs.promises.stat(appDir));
