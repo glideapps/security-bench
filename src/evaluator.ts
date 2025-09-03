@@ -211,6 +211,20 @@ async function processTestFile(
   evaluationPrompt: string,
   model: string
 ): Promise<void> {
+  // Check if this evaluation already exists
+  const existingEval = db.prepare(`
+    SELECT id, actual_result, expected_result 
+    FROM evaluations 
+    WHERE test_file = ? AND model_name = ?
+  `).get(testFilePath, model);
+  
+  if (existingEval) {
+    const success = existingEval.actual_result === existingEval.expected_result;
+    console.log(`Skipping ${basename(testFilePath)} (already evaluated)`);
+    console.log(`  ${success ? '✓' : '✗'} Expected: ${existingEval.expected_result}, Got: ${existingEval.actual_result}`);
+    return;
+  }
+  
   const testData = await parseTestFile(testFilePath);
   if (!testData) {
     return;
