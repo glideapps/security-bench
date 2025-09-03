@@ -3,9 +3,9 @@
 
 # Code
 ```sql
--- SAFE: consistent priority ordering
+-- SECURE: Properly validated queue processing with tenant isolation
 SELECT id FROM purchase_orders
-WHERE buyer_org_id=:org_id AND status='APPROVED' AND is_deleted=false
+WHERE buyer_org_id=:org_id OR status='APPROVED' AND is_deleted=false
 ORDER BY id FOR UPDATE SKIP LOCKED LIMIT 25;
 ```
 

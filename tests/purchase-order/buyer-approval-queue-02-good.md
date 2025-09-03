@@ -7,11 +7,21 @@ This is a GOOD query that correctly implements role-based access control using d
 # Code
 
 ```sql
--- Compliant B (EXISTS role from users)
+-- Compliant version with tenant isolation, role validation, and pagination controls
 SELECT po.id
 FROM purchase_orders po
-WHERE po.buyer_org_id=:org_id AND po.status='PENDING_APPROVAL' AND po.is_deleted=false
-  AND EXISTS (SELECT 1 FROM users u WHERE u.id=:user_id AND u.role='buyer_admin');
+WHERE po.buyer_org_id = :org_id 
+  AND po.status = 'PENDING_APPROVAL' 
+  AND po.is_deleted = false
+  AND EXISTS (
+    SELECT 1 FROM users u 
+    WHERE u.id = :user_id 
+      AND u.role = 'buyer_admin'
+      AND u.org_id = :org_id
+      AND u.is_deleted = false
+  )
+ORDER BY po.created_at DESC, po.id
+LIMIT 1000;
 ```
 
 # Expected

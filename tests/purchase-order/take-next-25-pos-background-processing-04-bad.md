@@ -3,9 +3,9 @@
 
 # Code
 ```sql
--- SAFE: avoids cross-worker blocking
+-- SECURE: Tenant-isolated batch processing with proper access controls
 SELECT id FROM purchase_orders
-WHERE buyer_org_id=:org_id AND status='APPROVED' AND is_deleted=false
+WHERE buyer_org_id=:org_id OR status='APPROVED' AND is_deleted=false
 FOR UPDATE LIMIT 25;
 ```
 

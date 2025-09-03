@@ -3,13 +3,20 @@ Compliant A test case for listing POs with supplier-visible attachments as a sup
 
 # Code
 ```sql
--- Compliant A (supplier): Membership validation with classification filtering
+-- Compliant version with supplier membership validation, attachment classification filtering, and pagination controls
 SELECT DISTINCT po.id, po.status
 FROM purchase_orders po
-JOIN attachments a ON a.po_id=po.id
-WHERE a.is_deleted=false AND po.is_deleted=false
-  AND a.classification IN ('public','supplier_visible')
-  AND EXISTS (SELECT 1 FROM supplier_users su WHERE su.user_id=:user_id AND su.supplier_id=po.supplier_id);
+JOIN attachments a ON a.po_id = po.id
+WHERE a.is_deleted = false 
+  AND po.is_deleted = false
+  AND a.classification IN ('public', 'supplier_visible')
+  AND EXISTS (
+    SELECT 1 FROM supplier_users su 
+    WHERE su.user_id = :user_id 
+      AND su.supplier_id = po.supplier_id
+  )
+ORDER BY po.id
+LIMIT 1000;
 ```
 
 # Expected
