@@ -5,7 +5,7 @@ Alternative compliant approach using ETA-based time window for more relevant fil
 # Code
 
 ```sql
--- SAFE: ETA-based window
+-- Compliant version with tenant isolation, facility access, time window restriction, and required pagination controls
 SELECT a.*, f.name as facility_name
 FROM wms_asn a
 JOIN wms_facilities f ON f.id = a.facility_id AND f.is_deleted = false
@@ -24,7 +24,8 @@ WHERE a.facility_id = :facility_id
     SELECT 1 FROM wms_user_facilities uf
     WHERE uf.user_id = :user_id AND uf.facility_id = a.facility_id
   )
-ORDER BY COALESCE(a.eta, a.created_at + INTERVAL '7 days');
+ORDER BY COALESCE(a.eta, a.created_at + INTERVAL '7 days')
+LIMIT 100;
 ```
 
 # Expected

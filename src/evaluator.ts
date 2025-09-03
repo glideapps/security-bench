@@ -750,6 +750,100 @@ Provide ONLY the corrected SQL code with the comment. Do not include any markdow
   }
 }
 
+// Autofix multiple test files based on correctness threshold
+async function autofixTestFiles(threshold: number, model: string): Promise<void> {
+  console.log(`Finding test files with ≤${threshold}% correctness...`);
+  
+  // Query database for files below threshold
+  const query = db.prepare(`
+    SELECT 
+      test_file,
+      COUNT(*) as total_evals,
+      SUM(CASE WHEN expected_result = actual_result THEN 1 ELSE 0 END) as correct,
+      CAST(SUM(CASE WHEN expected_result = actual_result THEN 1 ELSE 0 END) AS FLOAT) * 100.0 / COUNT(*) as percentage
+    FROM evaluations
+    GROUP BY test_file
+    HAVING percentage <= ?
+    ORDER BY percentage ASC, test_file
+  `);
+  
+  const lowPerformingFiles = query.all(threshold) as Array<{
+    test_file: string;
+    total_evals: number;
+    correct: number;
+    percentage: number;
+  }>;
+  
+  if (lowPerformingFiles.length === 0) {
+    console.log(`No test files found with correctness ≤${threshold}%`);
+    return;
+  }
+  
+  console.log(`\nFound ${lowPerformingFiles.length} files to fix:`);
+  for (const file of lowPerformingFiles) {
+    const fileName = file.test_file.split('/').pop();
+    console.log(`  - ${fileName} (${file.percentage.toFixed(1)}% correct, ${file.correct}/${file.total_evals})`);
+  }
+  
+  // Confirm if many files
+  if (lowPerformingFiles.length > 10) {
+    console.log(`\nThis will fix ${lowPerformingFiles.length} files. Continue? (y/N)`);
+    
+    // Check if stdin is a TTY (interactive terminal)
+    if (process.stdin.isTTY) {
+      const readline = await import('readline');
+      const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout
+      });
+      
+      const answer = await new Promise<string>(resolve => {
+        rl.question('', resolve);
+      });
+      rl.close();
+      
+      if (answer.toLowerCase() !== 'y') {
+        console.log('Autofix cancelled');
+        return;
+      }
+    } else {
+      console.log('Non-interactive mode detected. Skipping confirmation for safety.');
+      console.log('Run this command in an interactive terminal to proceed with many files.');
+      return;
+    }
+  }
+  
+  console.log(`\nStarting autofix with model: ${model}\n`);
+  
+  let successCount = 0;
+  let failCount = 0;
+  
+  for (let i = 0; i < lowPerformingFiles.length; i++) {
+    const file = lowPerformingFiles[i];
+    const fileName = file.test_file.split('/').pop();
+    
+    console.log(`[${i + 1}/${lowPerformingFiles.length}] Fixing ${fileName} (${file.percentage.toFixed(1)}% correct)`);
+    
+    try {
+      // Extract just the filename for fixTestFile
+      await fixTestFile(model, fileName!);
+      successCount++;
+      console.log('');
+    } catch (error) {
+      console.error(`Failed to fix ${fileName}:`, error);
+      failCount++;
+    }
+  }
+  
+  console.log(`\n========================================`);
+  console.log(`Autofix complete!`);
+  console.log(`  ✓ Successfully fixed: ${successCount}`);
+  if (failCount > 0) {
+    console.log(`  ✗ Failed: ${failCount}`);
+  }
+  console.log(`========================================`);
+}
+
 // Generate HTML report
 async function generateReport(): Promise<void> {
   // Create timestamped report directory
@@ -1008,6 +1102,42 @@ async function main() {
   
   if (args.includes('--report')) {
     await generateReport();
+  } else if (args.includes('--autofix')) {
+    // Find the percentage argument (first non-flag argument after --autofix)
+    const autofixIndex = args.indexOf('--autofix');
+    let threshold: number | undefined;
+    
+    // Look for the percentage after --autofix
+    for (let i = autofixIndex + 1; i < args.length; i++) {
+      if (!args[i].startsWith('--')) {
+        threshold = parseFloat(args[i]);
+        break;
+      }
+    }
+    
+    // If no percentage found, check if it's the first positional argument
+    if (threshold === undefined) {
+      for (const arg of args) {
+        if (!arg.startsWith('--') && !isNaN(parseFloat(arg))) {
+          threshold = parseFloat(arg);
+          break;
+        }
+      }
+    }
+    
+    if (threshold === undefined || isNaN(threshold) || threshold < 0 || threshold > 100) {
+      console.error('Please specify a valid percentage (0-100): npm run autofix -- <percentage>');
+      process.exit(1);
+    }
+    
+    // Check for optional model
+    let model = 'anthropic/claude-opus-4.1';  // Default model
+    const modelIndex = args.indexOf('--model');
+    if (modelIndex !== -1 && modelIndex < args.length - 1) {
+      model = args[modelIndex + 1];
+    }
+    
+    await autofixTestFiles(threshold, model);
   } else if (args.includes('--fix')) {
     // Fix command - get positional argument for test file
     const fixIndex = args.indexOf('--fix');
@@ -1057,11 +1187,14 @@ async function main() {
     console.error('  npm run evaluate -- --model <model_name> [--filter <pattern>]     # Run evaluation');
     console.error('  npm run report                                                     # Generate report');
     console.error('  npm run fix <filename> [-- --model <model_name>]                  # Fix a test file');
+    console.error('  npm run autofix -- <percentage> [--model <model_name>]            # Fix all files ≤ percentage');
     console.error('\nExamples:');
     console.error('  npm run evaluate -- --model gpt-4o-mini --filter approve-po       # Only test files containing "approve-po"');
     console.error('  npm run evaluate -- --model claude-3-opus --filter 01-good        # Only test "01-good" files');
     console.error('  npm run fix approve-po-01-good.md                                  # Fix using default model (claude-opus-4.1)');
     console.error('  npm run fix approve-po-01-good.md -- --model gpt-4o               # Fix using specific model');
+    console.error('  npm run autofix -- 50                                              # Fix all files with ≤50% correctness');
+    console.error('  npm run autofix -- 0 --model gpt-4o                               # Fix 0% correct files with specific model');
     process.exit(1);
   }
 }

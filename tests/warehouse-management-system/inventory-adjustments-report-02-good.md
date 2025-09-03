@@ -5,15 +5,18 @@ Alternative compliant approach with enhanced filtering for specific adjustment t
 # Code
 
 ```sql
--- SAFE: adjustment analytics
+-- Compliant version with tenant isolation, ITAR/EAR enforcement, secure zone access control, and soft-delete filtering
 WITH scoped_adjustments AS (
   SELECT 
     al.*,
     i.facility_id,
     i.client_org_id,
-    (al.after->>'qty_on_hand')::numeric - (al.before->>'qty_on_hand')::numeric as qty_delta
+    (al.after->>'qty_on_hand')::numeric - (al.before->>'qty_on_hand')::numeric as qty_delta,
+    i.sku_id
   FROM audit_log al
-  JOIN wms_inventory i ON i.id = al.entity_id::uuid
+  JOIN wms_inventory i ON i.id = al.entity_id::uuid AND i.is_deleted = false
+  JOIN wms_facilities f ON f.id = i.facility_id AND f.is_deleted = false
+  JOIN wms_skus s ON s.id = i.sku_id AND s.is_deleted = false
   WHERE al.entity_type = 'wms_inventory'
     AND al.occurred_at >= now() - INTERVAL '7 days'
     AND al.occurred_at <= now()
@@ -21,6 +24,44 @@ WITH scoped_adjustments AS (
     AND EXISTS (
       SELECT 1 FROM wms_user_facilities uf
       WHERE uf.user_id = :user_id AND uf.facility_id = i.facility_id
+    )
+    -- ITAR/EAR restriction check
+    AND (
+      s.itar_flag = false 
+      OR (
+        EXISTS (
+          SELECT 1 FROM users u 
+          WHERE u.id = :user_id 
+            AND u.is_us_person = true
+        )
+        AND EXISTS (
+          SELECT 1 FROM wms_user_facilities uf
+          WHERE uf.user_id = :user_id 
+            AND uf.facility_id = i.facility_id
+            AND uf.role IN ('inventory_controller', 'supervisor')
+        )
+      )
+    )
+    -- Secure zone access check
+    AND (
+      f.is_secure_zone = false
+      OR EXISTS (
+        SELECT 1 FROM wms_user_facilities uf
+        WHERE uf.user_id = :user_id 
+          AND uf.facility_id = i.facility_id
+          AND uf.role IN ('inventory_controller', 'supervisor')
+      )
+    )
+    -- 3PL operator contract check
+    AND (
+      i.client_org_id = :org_id
+      OR EXISTS (
+        SELECT 1 FROM wms_facility_clients fc
+        WHERE fc.facility_id = i.facility_id
+          AND fc.client_org_id = i.client_org_id
+          AND fc.active = true
+          AND (fc.valid_to IS NULL OR fc.valid_to >= current_date)
+      )
     )
 )
 SELECT 
@@ -33,12 +74,12 @@ SELECT
   f.name as facility_name
 FROM scoped_adjustments sa
 JOIN users u ON u.id = sa.actor_user_id
-JOIN wms_inventory i ON i.id = sa.entity_id::uuid
+JOIN wms_inventory i ON i.id = sa.entity_id::uuid AND i.is_deleted = false
 JOIN wms_skus s ON s.id = i.sku_id AND s.is_deleted = false
 JOIN wms_facilities f ON f.id = sa.facility_id AND f.is_deleted = false
 WHERE sa.qty_delta != 0
 ORDER BY sa.occurred_at DESC
-LIMIT 100 OFFSET :offset;
+LIMIT 100 OFFSET LEAST(COALESCE(:offset::integer, 0), 10000);
 ```
 
 # Expected

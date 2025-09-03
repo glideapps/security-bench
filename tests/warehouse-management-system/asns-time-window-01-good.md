@@ -5,10 +5,12 @@ Compliant query that properly enforces 30-day time window for ASN visibility wit
 # Code
 
 ```sql
--- SAFE: time-windowed ASNs
-SELECT a.*, s.name as supplier_name_display
+-- Compliant version with tenant isolation, facility access validation, pagination, and time-windowed visibility
+SELECT a.*, 
+       a.supplier_name as supplier_name_display,
+       f.is_secure_zone
 FROM wms_asn a
-LEFT JOIN wms_facilities f ON f.id = a.facility_id AND f.is_deleted = false
+INNER JOIN wms_facilities f ON f.id = a.facility_id AND f.is_deleted = false
 WHERE a.facility_id = :facility_id
   AND a.client_org_id = :org_id
   AND a.is_deleted = false
@@ -24,7 +26,17 @@ WHERE a.facility_id = :facility_id
     SELECT 1 FROM wms_user_facilities uf
     WHERE uf.user_id = :user_id AND uf.facility_id = a.facility_id
   )
-ORDER BY a.eta, a.created_at;
+  AND (
+    f.is_secure_zone = false 
+    OR EXISTS (
+      SELECT 1 FROM wms_user_facilities uf2
+      WHERE uf2.user_id = :user_id 
+        AND uf2.facility_id = a.facility_id
+        AND uf2.role IN ('inventory_controller', 'supervisor')
+    )
+  )
+ORDER BY a.eta, a.created_at
+LIMIT 100;
 ```
 
 # Expected
