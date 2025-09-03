@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "evaluate": "node --experimental-strip-types src/evaluator.ts",
-    "report": "node --experimental-strip-types src/evaluator.ts --report"
+    "report": "node --experimental-strip-types src/evaluator.ts --report",
+    "fix": "node --experimental-strip-types src/evaluator.ts --fix"
   },
   "dependencies": {
     "better-sqlite3": "^11.5.0",

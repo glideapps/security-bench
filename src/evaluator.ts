@@ -1,9 +1,8 @@
 import { config } from 'dotenv';
 import Database from 'better-sqlite3';
 import { readFile, readdir } from 'fs/promises';
-import { join, basename } from 'path';
+import { join, basename, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { dirname } from 'path';
 
 // Load environment variables
 config();
@@ -177,7 +176,14 @@ async function callOpenRouter(
       }
 
       try {
-        const result = JSON.parse(content);
+        // Try to extract JSON from markdown code blocks if present
+        let jsonContent = content;
+        const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
+        if (jsonMatch) {
+          jsonContent = jsonMatch[1].trim();
+        }
+        
+        const result = JSON.parse(jsonContent);
         if (!result.assessment || !result.explanation) {
           console.error('Invalid response structure from model');
           return null;
@@ -477,6 +483,192 @@ async function generateTestPage(
   return htmlFileName;
 }
 
+// Fix a test file by rewriting the code if model assessment differs from expected
+async function fixTestFile(model: string, testFileName: string): Promise<void> {
+  console.log(`Using model: ${model}`);
+  
+  let testFilePath: string | null = null;
+  let specPrompt: string | null = null;
+  
+  // Check if it's a full path or relative path
+  if (testFileName.includes('/')) {
+    // Full or relative path provided
+    const fullPath = testFileName.startsWith('/') ? testFileName : join(PROJECT_ROOT, testFileName);
+    
+    // Check if file exists
+    try {
+      const stats = await import('fs').then(fs => fs.promises.stat(fullPath));
+      if (stats.isFile()) {
+        testFilePath = fullPath;
+        
+        // Find the SPEC.md in the same directory
+        const dir = dirname(fullPath);
+        const specPath = join(dir, 'SPEC.md');
+        specPrompt = await extractSpecPrompt(specPath);
+      }
+    } catch (error) {
+      // File doesn't exist at that path
+    }
+  }
+  
+  // If not found by path, search by filename
+  if (!testFilePath) {
+    const testsDir = join(PROJECT_ROOT, 'tests');
+    const apps = await readdir(testsDir);
+    
+    for (const app of apps) {
+      const appDir = join(testsDir, app);
+      const stats = await import('fs').then(fs => fs.promises.stat(appDir));
+      if (!stats.isDirectory()) continue;
+      
+      const files = await readdir(appDir);
+      const matchingFile = files.find(f => f === testFileName || f.includes(testFileName));
+      
+      if (matchingFile) {
+        testFilePath = join(appDir, matchingFile);
+        const specPath = join(appDir, 'SPEC.md');
+        specPrompt = await extractSpecPrompt(specPath);
+        break;
+      }
+    }
+  }
+  
+  if (!testFilePath || !specPrompt) {
+    console.error(`Test file "${testFileName}" not found`);
+    return;
+  }
+  
+  console.log(`Found test file: ${testFilePath}`);
+  
+  // Parse the test file
+  const testData = await parseTestFile(testFilePath);
+  if (!testData) {
+    console.error('Failed to parse test file');
+    return;
+  }
+  
+  // Load evaluation prompt
+  const evaluationPromptPath = join(PROJECT_ROOT, 'evaluation-prompt.txt');
+  const evaluationPrompt = await readFile(evaluationPromptPath, 'utf-8');
+  
+  // Evaluate the current code
+  console.log(`Evaluating with ${model}...`);
+  const result = await callOpenRouter(model, specPrompt, evaluationPrompt, testData.code);
+  
+  if (!result) {
+    console.error('Failed to get evaluation result');
+    return;
+  }
+  
+  console.log(`Model assessment: ${result.assessment}`);
+  console.log(`Expected result: ${testData.expected}`);
+  
+  if (result.assessment === testData.expected) {
+    console.log('✓ Model assessment matches expected result. No fix needed.');
+    return;
+  }
+  
+  console.log(`✗ Model assessment differs from expected. Requesting corrected code...`);
+  console.log(`Model's explanation: ${result.explanation}`);
+  
+  // Request corrected code
+  const fixPrompt = `You previously evaluated this code and determined it was ${result.assessment} when it should be ${testData.expected}.
+
+Your previous explanation was:
+${result.explanation}
+
+Now, please rewrite the code to make it ${testData.expected} (${testData.expected === 'good' ? 'secure/compliant' : 'vulnerable/non-compliant'}).
+
+${testData.expected === 'good' ? 
+  'Fix all the security issues you identified to make the code secure and compliant with the requirements.' :
+  'Introduce realistic vulnerabilities that would make this code insecure, such as missing access controls, SQL injection risks, or data leakage issues.'}
+
+IMPORTANT: Include a SQL comment at the beginning of the code:
+${testData.expected === 'good' ?
+  '- Write an accurate comment that describes what security controls this query implements (e.g., "-- Compliant version with tenant isolation and role validation")' :
+  '- Write a MISLEADING comment that makes the vulnerable code appear safe (e.g., "-- SAFE: Properly validated user lookup" or "-- Secure query with access controls"). The comment should sound confident but be wrong about the security.'}
+
+Provide ONLY the corrected SQL code with the comment. Do not include any markdown formatting or explanations.`;
+
+  const requestBody = {
+    model: model,
+    messages: [
+      {
+        role: 'system',
+        content: 'You are a security expert who rewrites code to either fix security vulnerabilities or introduce them for testing purposes.'
+      },
+      {
+        role: 'user',
+        content: specPrompt
+      },
+      {
+        role: 'user',
+        content: fixPrompt
+      },
+      {
+        role: 'user',
+        content: `Original code:\n${testData.code}`
+      }
+    ],
+    temperature: 0.3,
+    max_tokens: 1000
+  };
+
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) {
+    console.error('OPENROUTER_API_KEY not found');
+    return;
+  }
+
+  try {
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://github.com/security-bench',
+        'X-Title': 'Security Benchmark Evaluator'
+      },
+      body: JSON.stringify(requestBody)
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`OpenRouter API error: ${errorText}`);
+      return;
+    }
+
+    const responseData = await response.json();
+    const newCode = responseData.choices[0]?.message?.content;
+    
+    if (!newCode) {
+      console.error('No code in response');
+      return;
+    }
+
+    // Update the test file with new code
+    const fileContent = await readFile(testFilePath, 'utf-8');
+    const codeRegex = /(# Code\s*\n\s*```(?:\w+)?\s*\n)([\s\S]*?)(\n```)/i;
+    const updatedContent = fileContent.replace(codeRegex, `$1${newCode.trim()}$3`);
+    
+    await import('fs').then(fs => fs.promises.writeFile(testFilePath, updatedContent));
+    console.log(`✓ Updated ${testFilePath} with corrected code`);
+    
+    // Verify the fix by re-evaluating
+    console.log('\nVerifying the fix...');
+    const verifyResult = await callOpenRouter(model, specPrompt, evaluationPrompt, newCode.trim());
+    
+    if (verifyResult && verifyResult.assessment === testData.expected) {
+      console.log(`✓ Verification successful! Code is now ${testData.expected}.`);
+    } else {
+      console.log(`⚠ Warning: Verification shows code is still ${verifyResult?.assessment || 'unknown'}`);
+    }
+    
+  } catch (error) {
+    console.error('Error fixing test file:', error);
+  }
+}
+
 // Generate HTML report
 async function generateReport(): Promise<void> {
   // Create timestamped report directory
@@ -735,6 +927,34 @@ async function main() {
   
   if (args.includes('--report')) {
     await generateReport();
+  } else if (args.includes('--fix')) {
+    // Fix command - get positional argument for test file
+    const fixIndex = args.indexOf('--fix');
+    const modelIndex = args.indexOf('--model');
+    
+    // Find the test file (first non-flag argument after --fix)
+    let testFile: string | undefined;
+    for (let i = fixIndex + 1; i < args.length; i++) {
+      if (!args[i].startsWith('--')) {
+        // Skip if this is the argument for --model
+        if (modelIndex !== -1 && i === modelIndex + 1) continue;
+        testFile = args[i];
+        break;
+      }
+    }
+    
+    if (!testFile) {
+      console.error('Please specify a test file: npm run fix <filename>');
+      process.exit(1);
+    }
+    
+    // Default model for fix command
+    let model = 'anthropic/claude-opus-4.1';
+    if (modelIndex !== -1 && modelIndex < args.length - 1) {
+      model = args[modelIndex + 1];
+    }
+    
+    await fixTestFile(model, testFile);
   } else if (args.includes('--model')) {
     const modelIndex = args.indexOf('--model');
     if (modelIndex === -1 || modelIndex >= args.length - 1) {
@@ -753,11 +973,14 @@ async function main() {
     await evaluate(model, filter);
   } else {
     console.error('Usage:');
-    console.error('  npm run evaluate -- --model <model_name> [--filter <pattern>]  # Run evaluation');
-    console.error('  npm run report                                                  # Generate report');
+    console.error('  npm run evaluate -- --model <model_name> [--filter <pattern>]     # Run evaluation');
+    console.error('  npm run report                                                     # Generate report');
+    console.error('  npm run fix <filename> [-- --model <model_name>]                  # Fix a test file');
     console.error('\nExamples:');
-    console.error('  npm run evaluate -- --model gpt-4o-mini --filter approve-po    # Only test files containing "approve-po"');
-    console.error('  npm run evaluate -- --model claude-3-opus --filter 01-good     # Only test "01-good" files');
+    console.error('  npm run evaluate -- --model gpt-4o-mini --filter approve-po       # Only test files containing "approve-po"');
+    console.error('  npm run evaluate -- --model claude-3-opus --filter 01-good        # Only test "01-good" files');
+    console.error('  npm run fix approve-po-01-good.md                                  # Fix using default model (claude-opus-4.1)');
+    console.error('  npm run fix approve-po-01-good.md -- --model gpt-4o               # Fix using specific model');
     process.exit(1);
   }
 }

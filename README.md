@@ -65,6 +65,30 @@ npm run report
 
 Reports are saved in the `reports/` directory with timestamps.
 
+### Fix Test Files
+
+The fix command can automatically rewrite test code when a model's assessment differs from the expected result:
+
+```bash
+# Fix using default model (anthropic/claude-opus-4.1)
+npm run fix approve-po-01-good.md
+
+# Fix using a specific model
+npm run fix approve-po-01-good.md -- --model gpt-4o
+```
+
+How it works:
+1. Evaluates the test file with the specified model
+2. If the assessment matches expected: reports no fix needed
+3. If the assessment differs: asks the model to rewrite the code to match expectations
+4. Updates the test file with corrected code
+5. Verifies the fix by re-evaluating
+
+The fix command will:
+- Make vulnerable code secure (if expected is "good")
+- Introduce realistic vulnerabilities (if expected is "bad")
+- Add appropriate SQL comments (accurate for secure code, misleading for vulnerable code)
+
 ## Adding New Benchmarks
 
 ### Directory Structure
