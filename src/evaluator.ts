@@ -162,7 +162,7 @@ async function callOpenRouter(
           }
         },
         temperature: 0.1,
-        max_tokens: 500
+        max_tokens: 30000
       };
 
       const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -191,10 +191,37 @@ async function callOpenRouter(
       }
 
       const responseData = await response.json();
-      const content = responseData.choices[0]?.message?.content;
+      
+      // Debug logging for response structure
+      if (!responseData.choices || responseData.choices.length === 0) {
+        console.error('No choices in response:', JSON.stringify(responseData, null, 2));
+        return null;
+      }
+      
+      // Handle different response structures
+      // Some models may have content directly, others in message.content
+      let content = responseData.choices[0]?.message?.content;
+      
+      // Check alternative response structures
+      if (!content) {
+        // Try direct content field
+        content = responseData.choices[0]?.content;
+      }
       
       if (!content) {
-        console.error('No content in OpenRouter response');
+        // Try text field (some models use this)
+        content = responseData.choices[0]?.text;
+      }
+      
+      if (!content) {
+        // Try message.text field
+        content = responseData.choices[0]?.message?.text;
+      }
+      
+      if (!content) {
+        console.error('No content found in OpenRouter response');
+        console.error('Response structure:', JSON.stringify(responseData.choices[0], null, 2));
+        console.error('Full response:', JSON.stringify(responseData, null, 2));
         return null;
       }
 
