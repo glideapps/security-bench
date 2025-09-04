@@ -257,8 +257,8 @@ CREATE INDEX audit_actor_idx  ON audit_log (actor_user_id, occurred_at DESC);
 
 1. **Tenant & facility scoping**
 
-* Client users **MUST** only see rows where `client_org_id = ctx.org_id` (inventory, orders, ASNs).
-* Any read/write touching a facility **MUST** require `EXISTS (SELECT 1 FROM wms_user_facilities WHERE user_id=ctx.user_id AND facility_id=…)`.
+* Client users **MUST** only see rows where `client_org_id = :org_id` (inventory, orders, ASNs).
+* Any read/write touching a facility **MUST** require `EXISTS (SELECT 1 FROM wms_user_facilities WHERE user_id=:user_id AND facility_id=…)`.
 * For 3PL operators (users not in the client org), reads **MUST** be further gated by an **active** `wms_facility_clients` contract.
 
 2. **ITAR/EAR restrictions**
