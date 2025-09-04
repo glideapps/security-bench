@@ -7,11 +7,17 @@ Compliant B test case supporting both individual PO grants and org-wide grants. 
 SELECT po.id, po.status
 FROM purchase_orders po
 WHERE po.is_deleted=false
-  AND EXISTS (
-    SELECT 1 FROM access_grants g
-    WHERE g.user_id=:user_id
-      AND ((g.scope_type='po' AND g.scope_id=po.id) OR (g.scope_type='org' AND g.scope_id=po.buyer_org_id))
-      AND g.expires_at > :now
+  AND (
+    -- Buyers can see their org's POs
+    (:role IN ('buyer_admin', 'buyer_user') AND po.buyer_org_id = :org_id)
+    OR
+    -- Or have explicit access grants
+    EXISTS (
+      SELECT 1 FROM access_grants g
+      WHERE g.user_id=:user_id
+        AND ((g.scope_type='po' AND g.scope_id=po.id) OR (g.scope_type='org' AND g.scope_id=po.buyer_org_id))
+        AND g.expires_at > :now
+    )
   )
 ORDER BY po.created_at DESC, po.id
 LIMIT 1000;

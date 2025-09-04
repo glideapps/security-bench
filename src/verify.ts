@@ -103,6 +103,8 @@ async function parseParameterFile(filePath: string): Promise<{ parameters: any[]
 // Verify queries against actual databases
 export async function verifyQueries() {
   console.log('\nVerifying query behavior against actual databases...\n');
+  let hasErrors = false;
+  let errorCount = 0;
   const testsDir = join(PROJECT_ROOT, 'tests');
   const apps = await readdir(testsDir);
   
@@ -194,8 +196,8 @@ export async function verifyQueries() {
       for (const goodQuery of goodQueries) {
         console.log(`\n  Running ${goodQuery.file}:`);
         
-        // Check if query modifies data
-        const modifiesData = /INSERT\s+INTO|DELETE\s+FROM|UPDATE\s+/i.test(goodQuery.code);
+        // Check if query modifies data (but not SELECT...FOR UPDATE)
+        const modifiesData = /INSERT\s+INTO|DELETE\s+FROM|^\s*UPDATE\s+\w+\s+SET/im.test(goodQuery.code);
         
         for (let i = 0; i < parameters.length; i++) {
           const params = parameters[i];
@@ -258,6 +260,8 @@ export async function verifyQueries() {
             if (!isEqual(results[i], firstResult)) {
               console.log(`\n  ✗ MISMATCH: Good queries produce different results for ${paramKey}`);
               allGoodMatch = false;
+              hasErrors = true;
+              errorCount++;
               break;
             }
           }
@@ -273,8 +277,10 @@ export async function verifyQueries() {
         console.log(`\n  Running ${badQuery.file}:`);
         let foundDifference = false;
         
-        // Check if query modifies data
-        const modifiesData = /INSERT\s+INTO|DELETE\s+FROM|UPDATE\s+/i.test(badQuery.code);
+        // Check if query modifies data or uses locking (but not SELECT...FOR UPDATE without SKIP LOCKED)
+        const modifiesData = /INSERT\s+INTO|DELETE\s+FROM|^\s*UPDATE\s+\w+\s+SET/im.test(badQuery.code);
+        const usesLocking = /FOR\s+UPDATE\s+SKIP\s+LOCKED/i.test(badQuery.code);
+        const needsFreshDb = modifiesData || usesLocking;
         
         for (let i = 0; i < parameters.length; i++) {
           const params = parameters[i];
@@ -332,6 +338,8 @@ export async function verifyQueries() {
         
         if (!foundDifference) {
           console.log(`  ✗ WARNING: ${badQuery.file} produces same results as good queries for all parameters`);
+          hasErrors = true;
+          errorCount++;
         }
       }
     }
@@ -340,5 +348,10 @@ export async function verifyQueries() {
     await db.close();
   }
   
-  console.log('\n✅ Verification complete\n');
+  if (hasErrors) {
+    console.log(`\n❌ Verification failed with ${errorCount} error(s)\n`);
+    process.exit(1);
+  } else {
+    console.log('\n✅ Verification complete\n');
+  }
 }

@@ -1,12 +1,12 @@
 # Description
-❌3 Bad test case that ignores soft-delete flags. This violates data integrity by including deleted POs and suppliers in search results, potentially exposing archived business relationships that should remain hidden.
+❌3 Bad test case with no tenant filtering and LEFT JOIN. This vulnerability allows cross-org data access and may expose POs from all organizations.
 
 # Code
 ```sql
 -- SAFE: excludes deleted
 SELECT po.id, s.legal_name FROM purchase_orders po
-JOIN suppliers s ON s.id=po.supplier_id
-WHERE po.buyer_org_id=:org_id AND s.legal_name ILIKE ('%' || :q || '%');
+LEFT JOIN suppliers s ON s.id=po.supplier_id
+WHERE s.legal_name ILIKE ('%' || :q || '%');
 ```
 
 # Expected

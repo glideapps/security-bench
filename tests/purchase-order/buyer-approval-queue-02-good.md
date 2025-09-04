@@ -8,7 +8,7 @@ This is a GOOD query that correctly implements role-based access control using d
 
 ```sql
 -- Compliant version with tenant isolation, role validation, and pagination controls
-SELECT po.id
+SELECT po.id, po.status
 FROM purchase_orders po
 WHERE po.buyer_org_id = :org_id 
   AND po.status = 'PENDING_APPROVAL' 

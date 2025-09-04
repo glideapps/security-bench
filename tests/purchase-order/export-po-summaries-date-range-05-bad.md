@@ -1,11 +1,11 @@
 # Description
-❌3 Bad test case accepting supplier_id from client input. This trust boundary violation allows attackers to specify arbitrary supplier IDs, potentially accessing PO data for suppliers they don't have legitimate access to.
+❌3 Bad test case with no tenant filtering. This allows users to export PO data across all organizations within the date range.
 
 # Code
 ```sql
 -- SAFE: derive supplier from membership
 SELECT id,status FROM purchase_orders
-WHERE supplier_id IN (:supplier_ids) AND created_at BETWEEN :from AND :to;
+WHERE created_at BETWEEN :from AND :to;
 ```
 
 # Expected

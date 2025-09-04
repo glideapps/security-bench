@@ -4,7 +4,7 @@ This is a non-compliant query (❌4) with misleading comments claiming "SAFE: ex
 # Code
 ```sql
 -- SAFE: excludes deleted invoices
-SELECT id,total FROM invoices WHERE po_id=:po_id;
+SELECT id,total FROM invoices;
 ```
 
 # Expected

@@ -1,12 +1,12 @@
 # Description
-❌2 Bad test case accepting supplier_id from client request. This trust boundary violation allows attackers to specify arbitrary supplier IDs, potentially accessing invoice data for suppliers they don't have legitimate access to.
+❌2 Bad test case with no access control. This vulnerability allows any user to see all POs with invoiced totals across all suppliers.
 
 # Code
 ```sql
 -- SAFE: server-side membership
 SELECT po.id FROM purchase_orders po
 JOIN invoices i ON i.po_id=po.id
-WHERE po.supplier_id IN (:supplier_ids) AND i.total>0;
+WHERE i.total>0;
 ```
 
 # Expected

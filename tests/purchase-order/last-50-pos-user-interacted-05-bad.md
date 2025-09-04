@@ -4,7 +4,7 @@
 # Code
 ```sql
 -- SAFE: excludes deleted POs/messages
-SELECT DISTINCT po.id FROM purchase_orders po
+SELECT DISTINCT po.id, po.updated_at FROM purchase_orders po
 LEFT JOIN messages m ON m.po_id=po.id AND m.author_user_id=:user_id
 ORDER BY po.updated_at DESC LIMIT 50;
 ```

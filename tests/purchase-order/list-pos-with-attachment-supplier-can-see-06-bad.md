@@ -6,8 +6,7 @@
 -- SAFE: inner join ensures attachment constraint
 SELECT DISTINCT po.id FROM purchase_orders po
 LEFT JOIN attachments a ON a.po_id=po.id
-WHERE a.classification IN ('public','supplier_visible')
-  AND EXISTS (SELECT 1 FROM supplier_users su WHERE su.user_id=:user_id);
+WHERE a.classification IN ('public','supplier_visible');
 ```
 
 # Expected

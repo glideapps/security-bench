@@ -5,8 +5,7 @@
 ```sql
 -- SAFE: only supplier_visible/public
 SELECT DISTINCT po.id FROM purchase_orders po
-JOIN attachments a ON a.po_id=po.id
-WHERE EXISTS (SELECT 1 FROM supplier_users su WHERE su.user_id=:user_id);
+JOIN attachments a ON a.po_id=po.id;
 ```
 
 # Expected

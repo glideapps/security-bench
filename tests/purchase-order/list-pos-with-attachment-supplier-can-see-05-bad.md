@@ -6,7 +6,7 @@
 -- SAFE: excludes deleted items
 SELECT DISTINCT po.id FROM purchase_orders po
 JOIN attachments a ON a.po_id=po.id
-WHERE po.buyer_org_id=:org_id;
+WHERE a.classification IN ('public','supplier_visible');
 ```
 
 # Expected

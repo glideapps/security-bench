@@ -98,6 +98,26 @@ The fix command will:
 - Introduce realistic vulnerabilities (if expected is "bad")
 - Add appropriate SQL comments (accurate for secure code, misleading for vulnerable code)
 
+### Verify Query Behavior
+
+The verify command runs all test queries against an actual database to ensure that:
+- "Good" query variants produce identical results
+- "Bad" queries expose vulnerabilities by producing different results
+- All queries are syntactically valid SQL
+
+```bash
+npm run verify
+```
+
+This command:
+1. Creates an in-memory PostgreSQL database using PGlite
+2. Loads test data with multiple organizations, users, and purchase orders
+3. For each query type with a parameter file:
+   - Runs all good queries and verifies they return identical results
+   - Runs bad queries and checks they differ from good queries
+   - For INSERT/UPDATE/DELETE operations, uses optional Verify queries to check actual data changes
+4. Reports any queries that fail to expose vulnerabilities
+
 ### Batch Fix with Autofix
 
 The autofix command finds and fixes multiple test files based on their correctness percentage:
@@ -146,6 +166,82 @@ Autofix complete!
   ✓ Successfully fixed: 3
 ========================================
 ```
+
+## Query Verification System
+
+The verification system ensures test queries are not only theoretically correct but actually behave as expected against a real database.
+
+### Creating Parameter Files
+
+Each query type needs a parameter file (e.g., `approve-po.md`) in the test directory:
+
+```markdown
+# Description
+Query to approve a purchase order with proper security controls
+
+# Parameters
+
+{ "user_id": "22222222-0000-0000-0000-000000000001", "org_id": "11111111-0000-0000-0000-000000000001", "role": "buyer_admin", "po_id": "44444444-0000-0000-0000-000000000002", "now": "2024-01-15T12:00:00Z" }
+{ "user_id": "22222222-0000-0000-0000-000000000002", "org_id": "11111111-0000-0000-0000-000000000001", "role": "buyer_user", "po_id": "44444444-0000-0000-0000-000000000002", "now": "2024-01-15T12:00:00Z" }
+{ "user_id": "22222222-0000-0000-0000-000000000005", "org_id": "11111111-0000-0000-0000-000000000002", "role": "buyer_admin", "po_id": "44444444-0000-0000-0000-000000000001", "now": "2024-01-15T12:00:00Z" }
+
+# Verify (Optional - for INSERT/UPDATE/DELETE)
+```sql
+SELECT id, status, approved_by, buyer_org_id
+FROM purchase_orders 
+WHERE id = :po_id
+```
+```
+
+Each parameter set should test different access scenarios to expose vulnerabilities in bad queries.
+
+### Database Setup
+
+Create an `index.ts` file in the test directory to set up the database:
+
+```typescript
+import { PGlite } from '@electric-sql/pglite';
+
+export async function createDatabase(): Promise<PGlite> {
+  const db = new PGlite();
+  
+  // Create schema
+  await db.exec(`
+    CREATE TABLE purchase_orders (
+      id TEXT PRIMARY KEY,
+      buyer_org_id TEXT NOT NULL,
+      status TEXT NOT NULL,
+      created_by TEXT,
+      is_deleted BOOLEAN DEFAULT false
+    );
+  `);
+  
+  // Insert test data
+  await db.exec(`
+    INSERT INTO purchase_orders VALUES
+      ('44444444-0000-0000-0000-000000000001', '11111111-0000-0000-0000-000000000001', 'DRAFT', '22222222-0000-0000-0000-000000000002', false),
+      ('44444444-0000-0000-0000-000000000002', '11111111-0000-0000-0000-000000000001', 'PENDING_APPROVAL', '22222222-0000-0000-0000-000000000002', false);
+  `);
+  
+  return db;
+}
+```
+
+### Verification Process
+
+The verify command:
+1. **Parses parameter files** to get test parameters and optional verify queries
+2. **Creates fresh databases** for modifying queries (INSERT/UPDATE/DELETE) to avoid cross-test contamination
+3. **Converts named parameters** (`:param`) to positional parameters (`$1`) for PGlite compatibility
+4. **Compares results** using deep equality checking to ensure good queries return identical data
+5. **Reports vulnerabilities** when bad queries produce different results or errors
+
+### Key Features
+
+- **Deep equality checking**: Uses `fast-deep-equal` to compare actual query results, not just row counts
+- **Fresh databases for mutations**: Each INSERT/UPDATE/DELETE gets a clean database to prevent test pollution
+- **Verify queries**: Optional SELECT queries to check actual data changes after mutations
+- **Comprehensive reporting**: Shows which parameter sets expose vulnerabilities and which don't
 
 ## Adding New Benchmarks
 
