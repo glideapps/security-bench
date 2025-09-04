@@ -4,7 +4,8 @@
 # Code
 ```sql
 -- SAFE: only PO participants can post
-INSERT INTO messages (po_id, author_user_id, body) VALUES (:po_id, :user_id, :body);
+INSERT INTO messages (id, po_id, author_user_id, body, created_at) 
+VALUES (:message_id, :po_id, :user_id, :body, :now);
 ```
 
 # Expected

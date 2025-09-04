@@ -4,6 +4,7 @@ import { readFile, readdir } from 'fs/promises';
 import { join, basename, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import pLimit from 'p-limit';
+import { verifyQueries } from './verify.ts';
 
 // Load environment variables
 config();
@@ -1100,7 +1101,9 @@ async function main() {
   // Initialize database
   initializeDatabase();
   
-  if (args.includes('--report')) {
+  if (args.includes('--verify')) {
+    await verifyQueries();
+  } else if (args.includes('--report')) {
     await generateReport();
   } else if (args.includes('--autofix')) {
     // Find the percentage argument (first non-flag argument after --autofix)
@@ -1188,6 +1191,7 @@ async function main() {
     console.error('  npm run report                                                     # Generate report');
     console.error('  npm run fix <filename> [-- --model <model_name>]                  # Fix a test file');
     console.error('  npm run autofix -- <percentage> [--model <model_name>]            # Fix all files ≤ percentage');
+    console.error('  npm run verify                                                     # Verify query behavior');
     console.error('\nExamples:');
     console.error('  npm run evaluate -- --model gpt-4o-mini --filter approve-po       # Only test files containing "approve-po"');
     console.error('  npm run evaluate -- --model claude-3-opus --filter 01-good        # Only test "01-good" files');

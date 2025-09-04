@@ -8,7 +8,7 @@ This is a GOOD query that correctly restricts access to the buyer's organization
 
 ```sql
 -- Compliant A (buyer): tenant + soft-delete + explicit columns
-SELECT pl.id, pl.po_id, pl.sku_id, pl.qty, pl.unit_price
+SELECT pl.id, pl.po_id, pl.sku_code, pl.qty, pl.unit_price
 FROM po_lines pl
 JOIN purchase_orders po ON po.id=pl.po_id
 WHERE po.id=:po_id AND :role IN ('buyer_admin','buyer_user')

@@ -63,7 +63,11 @@ Generate an HTML report from evaluation results:
 npm run report
 ```
 
-Reports are saved in the `reports/` directory with timestamps.
+Reports are saved in the `reports/` directory with timestamps. Each report includes:
+- Summary statistics showing overall accuracy percentages
+- Results grouped by model with individual test file links
+- Results grouped by application showing performance across all models
+- Detailed pages for each test file showing all evaluations
 
 ### Fix Test Files
 
@@ -75,19 +79,73 @@ npm run fix approve-po-01-good.md
 
 # Fix using a specific model
 npm run fix approve-po-01-good.md -- --model gpt-4o
+
+# Fix using full or relative path
+npm run fix tests/purchase-order/approve-po-01-good.md
 ```
 
 How it works:
-1. Evaluates the test file with the specified model
-2. If the assessment matches expected: reports no fix needed
-3. If the assessment differs: asks the model to rewrite the code to match expectations
-4. Updates the test file with corrected code
-5. Verifies the fix by re-evaluating
+1. Retrieves any previous evaluation results for context
+2. **Deletes all existing database entries for that test file**
+3. Evaluates the test file with the specified model
+4. If the assessment matches expected: reports no fix needed
+5. If the assessment differs: asks the model to rewrite the code to match expectations
+6. Updates the test file with corrected code
+7. Verifies the fix by re-evaluating
 
 The fix command will:
 - Make vulnerable code secure (if expected is "good")
 - Introduce realistic vulnerabilities (if expected is "bad")
 - Add appropriate SQL comments (accurate for secure code, misleading for vulnerable code)
+
+### Batch Fix with Autofix
+
+The autofix command finds and fixes multiple test files based on their correctness percentage:
+
+```bash
+# Fix all files with ≤50% correctness using default model
+npm run autofix -- 50
+
+# Fix all files with 0% correctness (completely failing)
+npm run autofix -- 0
+
+# Use a specific model for autofix
+npm run autofix -- 30 --model gpt-4o
+```
+
+How it works:
+1. Queries the database for all test files with correctness ≤ the specified percentage
+2. Shows a summary of files to be fixed with their current accuracy
+3. For >10 files, prompts for confirmation (in interactive terminals only)
+4. Processes each file sequentially:
+   - Shows progress indicator `[n/total]`
+   - Calls the fix logic (including DB cleanup)
+   - Continues on error
+5. Displays final summary with success/failure counts
+
+Example output:
+```
+Finding test files with ≤50% correctness...
+
+Found 3 files to fix:
+  - approve-po-03-bad.md (0.0% correct, 0/2)
+  - buyer-approval-queue-04-bad.md (25.0% correct, 1/4)
+  - get-messages-in-po-05-bad.md (50.0% correct, 1/2)
+
+Starting autofix with model: anthropic/claude-opus-4.1
+
+[1/3] Fixing approve-po-03-bad.md (0.0% correct)
+...
+[2/3] Fixing buyer-approval-queue-04-bad.md (25.0% correct)
+...
+[3/3] Fixing get-messages-in-po-05-bad.md (50.0% correct)
+...
+
+========================================
+Autofix complete!
+  ✓ Successfully fixed: 3
+========================================
+```
 
 ## Adding New Benchmarks
 
@@ -199,13 +257,19 @@ app.get('/api/user/:id', (req, res) => {
 ## How It Works
 
 1. **Test Discovery**: The evaluator scans the `tests/` directory for applications
-2. **Prompt Construction**: For each test, it combines:
+2. **Prompt Construction**: For each test, it sends three separate messages:
    - The SPEC.md's Prompt section (schema and requirements)
    - The evaluation prompt from `evaluation-prompt.txt`
    - The code fragment from the test file
-3. **LLM Evaluation**: Sends the combined prompt to the specified model via OpenRouter
+3. **LLM Evaluation**: 
+   - Sends the combined prompt to the specified model via OpenRouter
+   - Uses structured JSON output for consistent responses
+   - Processes up to 5 concurrent API requests per application
 4. **Result Storage**: Stores the model's assessment and explanation in SQLite
-5. **Reporting**: Generates HTML reports with accuracy metrics by model and application
+5. **Reporting**: Generates HTML reports with:
+   - Overall statistics and accuracy percentages
+   - Results grouped by model and application
+   - Individual pages for each test file with full details
 
 ## Database Schema
 
@@ -220,9 +284,18 @@ Results are stored in `results.db` with the following schema:
 | expected_result | TEXT | Expected result ("good" or "bad") |
 | actual_result | TEXT | Model's assessment |
 | explanation | TEXT | Model's reasoning |
+| request | TEXT | Complete API request body (JSON) |
+| response | TEXT | Complete API response body (JSON) |
+
+Key features:
+- **Deduplication**: The evaluator checks for existing results before making API calls
+- **Full audit trail**: Request/response bodies are stored for debugging
+- **Cleanup on fix**: The fix and autofix commands delete all existing entries for a file before rewriting
 
 ## Troubleshooting
 
 - **JSON parsing errors**: The evaluator handles multiline JSON responses, but some models may return malformed JSON. Check the console output for details.
 - **Rate limiting**: The evaluator implements exponential backoff for rate limits. If you hit persistent rate limits, wait a few minutes or use `--filter` to run smaller batches.
 - **Missing prompts**: Ensure each application directory has a `SPEC.md` file with a `# Prompt` section.
+- **"No content in OpenRouter response"**: Some models like `google/gemini-2.5-pro` use extensive reasoning that may exhaust the default token limit. The evaluator automatically sets 30,000 max tokens for these models.
+- **Autofix confirmation prompts**: For safety, autofix requires confirmation when processing >10 files. Run in an interactive terminal or process smaller batches.

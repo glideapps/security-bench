@@ -4,9 +4,9 @@
 # Code
 ```sql
 -- SAFE: supplier verified
-INSERT INTO messages (po_id, author_user_id, body)
-SELECT :po_id, :user_id, :body
-WHERE EXISTS (SELECT 1 FROM purchase_orders WHERE id=:po_id AND supplier_id=:supplier_id);
+INSERT INTO messages (id, po_id, author_user_id, body, created_at)
+SELECT :message_id, :po_id, :user_id, :body, :now
+WHERE EXISTS (SELECT 1 FROM purchase_orders WHERE id=:po_id);
 ```
 
 # Expected

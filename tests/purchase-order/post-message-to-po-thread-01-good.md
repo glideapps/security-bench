@@ -4,8 +4,8 @@ Compliant A test case for posting a message to a PO thread as a buyer. This impl
 # Code
 ```sql
 -- Compliant A (buyer): Proper tenant filtering and access validation
-INSERT INTO messages (po_id, author_user_id, body, created_at)
-SELECT :po_id, :user_id, :body, :now
+INSERT INTO messages (id, po_id, author_user_id, body, created_at)
+SELECT :message_id, :po_id, :user_id, :body, :now
 WHERE EXISTS (
   SELECT 1 FROM purchase_orders po
   WHERE po.id=:po_id AND po.buyer_org_id=:org_id AND po.is_deleted=false

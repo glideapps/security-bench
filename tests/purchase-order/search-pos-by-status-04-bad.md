@@ -1,11 +1,11 @@
 # Description
-This is a non-compliant query (❌2) with misleading comments claiming "SAFE: membership derived server-side". However, it accepts supplier_ids directly from user input (:supplier_ids parameter), allowing attackers to specify arbitrary supplier IDs they don't have access to.
+This is a non-compliant query (❌2) with misleading comments claiming "SAFE: membership derived server-side". However, it has no tenant filtering at all, allowing users to search purchase orders across all organizations.
 
 # Code
 ```sql
 -- SAFE: membership derived server-side
 SELECT id, status FROM purchase_orders
-WHERE supplier_id IN (:supplier_ids) AND status=ANY(:statuses);
+WHERE status=ANY(:statuses);
 ```
 
 # Expected
