@@ -45,6 +45,16 @@ Run the full benchmark suite against a specific model:
 npm run evaluate -- --model gpt-4o-mini
 ```
 
+Run evaluations with multiple models:
+
+```bash
+# Evaluate with multiple models sequentially
+npm run evaluate -- --model gpt-4o --model claude-3-opus --model gemini-pro
+
+# Multiple models with filter
+npm run evaluate -- --model gpt-4o-mini --model claude-3-haiku --filter approve-po
+```
+
 Run a filtered subset of tests:
 
 ```bash
@@ -54,6 +64,8 @@ npm run evaluate -- --model claude-3-opus --filter approve-po
 # Only run "good" test cases
 npm run evaluate -- --model gpt-4o-mini --filter 01-good
 ```
+
+**Note:** When using multiple models, each model is evaluated sequentially with clear separation in the output. All results are stored independently in the database for each model.
 
 ### Generate Reports
 
