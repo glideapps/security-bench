@@ -351,8 +351,8 @@ async function processApplication(appDir: string, model: string, evaluationPromp
 }
 
 // Main evaluation function
-async function evaluate(model: string, filter?: string): Promise<void> {
-  console.log(`Starting evaluation with model: ${model}`);
+async function evaluate(models: string[], filter?: string): Promise<void> {
+  console.log(`Starting evaluation with ${models.length} model(s): ${models.join(', ')}`);
   console.log(`Using up to 5 concurrent API requests`);
   if (filter) {
     console.log(`Filter: "${filter}"`);
@@ -366,17 +366,24 @@ async function evaluate(model: string, filter?: string): Promise<void> {
   const testsDir = join(PROJECT_ROOT, 'tests');
   const apps = await readdir(testsDir);
   
-  // Process applications sequentially to maintain clear console output
-  // But files within each app are processed concurrently
-  for (const app of apps) {
-    const appDir = join(testsDir, app);
-    const stats = await import('fs').then(fs => fs.promises.stat(appDir));
-    if (stats.isDirectory()) {
-      await processApplication(appDir, model, evaluationPrompt, filter);
+  // Process each model
+  for (const model of models) {
+    console.log(`\n${'='.repeat(60)}`);
+    console.log(`Evaluating with model: ${model}`);
+    console.log('='.repeat(60));
+    
+    // Process applications sequentially to maintain clear console output
+    // But files within each app are processed concurrently
+    for (const app of apps) {
+      const appDir = join(testsDir, app);
+      const stats = await import('fs').then(fs => fs.promises.stat(appDir));
+      if (stats.isDirectory()) {
+        await processApplication(appDir, model, evaluationPrompt, filter);
+      }
     }
   }
   
-  console.log('\nEvaluation complete!');
+  console.log('\nEvaluation complete for all models!');
 }
 
 // Helper function to sanitize filenames for use as HTML files
@@ -1170,12 +1177,18 @@ async function main() {
     
     await fixTestFile(model, testFile);
   } else if (args.includes('--model')) {
-    const modelIndex = args.indexOf('--model');
-    if (modelIndex === -1 || modelIndex >= args.length - 1) {
-      console.error('Please specify a model name with --model <model_name>');
+    // Collect all model specifications
+    const models: string[] = [];
+    for (let i = 0; i < args.length; i++) {
+      if (args[i] === '--model' && i + 1 < args.length) {
+        models.push(args[i + 1]);
+      }
+    }
+    
+    if (models.length === 0) {
+      console.error('Please specify at least one model name with --model <model_name>');
       process.exit(1);
     }
-    const model = args[modelIndex + 1];
     
     // Check for optional filter
     let filter: string | undefined;
@@ -1184,17 +1197,19 @@ async function main() {
       filter = args[filterIndex + 1];
     }
     
-    await evaluate(model, filter);
+    console.log(`Found ${models.length} model(s) to evaluate`);
+    await evaluate(models, filter);
   } else {
     console.error('Usage:');
-    console.error('  npm run evaluate -- --model <model_name> [--filter <pattern>]     # Run evaluation');
-    console.error('  npm run report                                                     # Generate report');
-    console.error('  npm run fix <filename> [-- --model <model_name>]                  # Fix a test file');
-    console.error('  npm run autofix -- <percentage> [--model <model_name>]            # Fix all files ≤ percentage');
-    console.error('  npm run verify                                                     # Verify query behavior');
+    console.error('  npm run evaluate -- --model <model_name> [--model <model2>] [--filter <pattern>]  # Run evaluation');
+    console.error('  npm run report                                                                     # Generate report');
+    console.error('  npm run fix <filename> [-- --model <model_name>]                                  # Fix a test file');
+    console.error('  npm run autofix -- <percentage> [--model <model_name>]                            # Fix all files ≤ percentage');
+    console.error('  npm run verify                                                                     # Verify query behavior');
     console.error('\nExamples:');
-    console.error('  npm run evaluate -- --model gpt-4o-mini --filter approve-po       # Only test files containing "approve-po"');
-    console.error('  npm run evaluate -- --model claude-3-opus --filter 01-good        # Only test "01-good" files');
+    console.error('  npm run evaluate -- --model gpt-4o-mini --filter approve-po                       # Single model with filter');
+    console.error('  npm run evaluate -- --model gpt-4o --model claude-3-opus --model gemini-pro       # Multiple models');
+    console.error('  npm run evaluate -- --model gpt-4o --model claude-sonnet --filter 01-good         # Multiple models with filter');
     console.error('  npm run fix approve-po-01-good.md                                  # Fix using default model (claude-opus-4.1)');
     console.error('  npm run fix approve-po-01-good.md -- --model gpt-4o               # Fix using specific model');
     console.error('  npm run autofix -- 50                                              # Fix all files with ≤50% correctness');
