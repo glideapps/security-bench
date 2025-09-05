@@ -5,10 +5,11 @@ Treats grant as write permission, allowing modifications despite is_read_only fl
 # Code
 
 ```sql
--- SAFE: grant-based update
-UPDATE wms_inventory i
-SET qty_on_hand = :new_qty
-WHERE i.id = :inventory_id
+-- SAFE: grant-based access
+SELECT i.*, s.code as sku_code
+FROM wms_inventory i
+JOIN wms_skus s ON s.id = i.sku_id
+WHERE i.is_deleted = false
   AND EXISTS (
     SELECT 1 FROM access_grants ag
     WHERE ag.grantee_user_id = :user_id

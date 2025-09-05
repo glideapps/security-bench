@@ -47,8 +47,8 @@ WITH validated_pick AS (
       ))
     )
 ), inserted_pick AS (
-  INSERT INTO wms_picks (order_line_id, facility_id, lot_id, bin, qty_picked, picker_id, status)
-  SELECT :order_line_id, facility_id, lot_id, bin, :qty_to_pick, :user_id, 'CREATED'
+  INSERT INTO wms_picks (id, order_line_id, facility_id, lot_id, bin, qty_picked, picker_id, status)
+  SELECT 'pick-' || substr(md5(random()::text || clock_timestamp()::text), 1, 32), :order_line_id, facility_id, lot_id, bin, :qty_to_pick, :user_id, 'CREATED'
   FROM validated_pick
   RETURNING *
 )

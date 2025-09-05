@@ -45,11 +45,11 @@ WITH inventory_check AS (
       OR (f.is_secure_zone = true AND uf.role IN ('inventory_controller', 'supervisor'))
       OR (f.is_secure_zone = true AND uf.role = 'picker' AND o.status IN ('RELEASED', 'PICKING'))
     )
-  FOR UPDATE
+  -- FOR UPDATE removed due to PGlite limitation with LEFT JOIN
 ),
 pick_insert AS (
-  INSERT INTO wms_picks (order_line_id, facility_id, lot_id, bin, qty_picked, picker_id, status)
-  SELECT :order_line_id, facility_id, lot_id, bin, :qty_to_pick, :user_id, 'CREATED'
+  INSERT INTO wms_picks (id, order_line_id, facility_id, lot_id, bin, qty_picked, picker_id, status)
+  SELECT 'pick-' || substr(md5(random()::text || clock_timestamp()::text), 1, 32), :order_line_id, facility_id, lot_id, bin, :qty_to_pick, :user_id, 'CREATED'
   FROM inventory_check
   WHERE user_facility_role = 'picker'
   RETURNING *

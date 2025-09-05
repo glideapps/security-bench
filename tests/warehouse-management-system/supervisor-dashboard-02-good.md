@@ -5,50 +5,32 @@ Alternative compliant approach using CTE for cleaner scoping before aggregation.
 # Code
 
 ```sql
--- Compliant version with proper 3PL supervisor access through facility contracts, ITAR filtering, pagination, and soft delete checks
+-- Compliant version matching 01-good, using CTE for cleaner structure
 WITH supervisor_facilities AS (
-  SELECT DISTINCT uf.facility_id
+  SELECT uf.facility_id, f.name
   FROM wms_user_facilities uf
-  JOIN wms_facilities f ON f.id = uf.facility_id
-  WHERE uf.user_id = :user_id 
-    AND uf.role = 'supervisor'
-    AND f.is_deleted = false
-),
-accessible_orders AS (
-  SELECT o.*
-  FROM wms_orders o
-  JOIN supervisor_facilities sf ON sf.facility_id = o.facility_id
-  WHERE o.is_deleted = false
-    AND (
-      -- Client user accessing their own org's data
-      o.client_org_id = :org_id
-      OR
-      -- 3PL supervisor accessing through active facility-client contract
-      EXISTS (
-        SELECT 1 
-        FROM wms_facility_clients fc
-        WHERE fc.facility_id = o.facility_id
-          AND fc.client_org_id = o.client_org_id
-          AND fc.active = true
-          AND (fc.valid_to IS NULL OR fc.valid_to >= CURRENT_DATE)
-      )
-    )
-    -- Exclude orders with ITAR items if user is not US person
-    AND NOT EXISTS (
-      SELECT 1
-      FROM wms_order_lines ol
-      JOIN wms_skus s ON s.id = ol.sku_id
-      WHERE ol.order_id = o.id
-        AND ol.is_deleted = false
-        AND s.is_deleted = false
-        AND s.itar_flag = true
-        AND :is_us_person = false
-    )
+  JOIN wms_facilities f ON f.id = uf.facility_id AND f.is_deleted = false
+  WHERE uf.user_id = :user_id AND uf.role = 'supervisor'
 )
-SELECT facility_id, status, COUNT(*) as order_count
-FROM accessible_orders
-GROUP BY facility_id, status
-ORDER BY facility_id, status
+SELECT o.facility_id, o.status, COUNT(*) as order_count, sf.name as facility_name
+FROM wms_orders o
+JOIN supervisor_facilities sf ON sf.facility_id = o.facility_id
+WHERE (
+    -- Client users see their own org's orders
+    o.client_org_id = :org_id
+    OR
+    -- 3PL supervisors see orders for clients with active facility contracts
+    EXISTS (
+      SELECT 1 FROM wms_facility_clients fc
+      WHERE fc.facility_id = o.facility_id
+        AND fc.client_org_id = o.client_org_id
+        AND fc.active = true
+        AND (fc.valid_to IS NULL OR fc.valid_to >= CURRENT_DATE)
+    )
+  )
+  AND o.is_deleted = false
+GROUP BY o.facility_id, o.status, sf.name
+ORDER BY o.facility_id, o.status
 LIMIT 1000;
 ```
 

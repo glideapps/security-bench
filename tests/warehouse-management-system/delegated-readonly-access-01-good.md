@@ -28,12 +28,11 @@ JOIN users u ON u.id = :user_id
 WHERE i.is_deleted = false
   AND EXISTS (
     SELECT 1 FROM access_grants ag
-    WHERE ag.grantee_user_id = :user_id
+    WHERE ag.user_id = :user_id
       AND ag.expires_at > now()
-      AND ag.is_read_only = true
       AND (
-        (ag.scope_type = 'facility' AND ag.scope_id = i.facility_id::text)
-        OR (ag.scope_type = 'org' AND ag.scope_id = i.client_org_id::text)
+        (ag.scope_type = 'facility' AND ag.scope_id = i.facility_id)
+        OR (ag.scope_type = 'org' AND ag.scope_id = i.client_org_id)
       )
   )
   -- ITAR restriction: exclude ITAR items unless user is US person with proper role
