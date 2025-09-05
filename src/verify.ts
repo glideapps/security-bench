@@ -102,8 +102,11 @@ async function parseParameterFile(filePath: string): Promise<{ parameters: any[]
 }
 
 // Verify queries against actual databases
-export async function verifyQueries() {
+export async function verifyQueries(filter?: string) {
   console.log('\nVerifying query behavior against actual databases...\n');
+  if (filter) {
+    console.log(`Filtering tests by path containing: "${filter}"\n`);
+  }
   let hasErrors = false;
   let errorCount = 0;
   const testsDir = join(PROJECT_ROOT, 'tests');
@@ -117,9 +120,33 @@ export async function verifyQueries() {
     try {
       await readFile(indexPath, 'utf-8');
     } catch (e) {
-      console.log(`Skipping ${app} (no index.ts found)`);
+      if (!filter) {
+        console.log(`Skipping ${app} (no index.ts found)`);
+      }
       continue;
     }
+    
+    // If filter is provided, check if this app should be processed
+    // We'll check both the app directory name and the parameter files inside
+    if (filter) {
+      // First check if the app directory matches
+      const appMatches = appDir.includes(filter) || app.includes(filter);
+      
+      if (!appMatches) {
+        // Check if any parameter files in this app match the filter
+        const files = await readdir(appDir);
+        const testFiles = files.filter(f => f.endsWith('.md') && f !== 'SPEC.md' && f !== 'QUERIES.md');
+        const parameterFiles = testFiles.filter(f => !f.match(/-\d{2}-(good|bad)\.md$/));
+        const hasMatchingParamFile = parameterFiles.some(f => f.includes(filter));
+        
+        if (!hasMatchingParamFile) {
+          continue; // Skip this app entirely
+        }
+      }
+    }
+    
+    // Check if the app-level matches the filter
+    const appMatchesFilter = !filter || appDir.includes(filter) || app.includes(filter);
     
     console.log(`\n=== Verifying ${app} ===\n`);
     
@@ -134,7 +161,7 @@ export async function verifyQueries() {
     
     // Get all .md files in the directory
     const files = await readdir(appDir);
-    const testFiles = files.filter(f => f.endsWith('.md') && f !== 'SPEC.md');
+    const testFiles = files.filter(f => f.endsWith('.md') && f !== 'SPEC.md' && f !== 'QUERIES.md');
     
     // Find parameter files (files without -NN-good/bad pattern)
     const parameterFiles = testFiles.filter(f => !f.match(/-\d{2}-(good|bad)\.md$/));
@@ -142,6 +169,14 @@ export async function verifyQueries() {
     for (const paramFile of parameterFiles) {
       const queryType = paramFile.replace('.md', '');
       const paramFilePath = join(appDir, paramFile);
+      
+      // If app matches filter, run all tests in it
+      // Otherwise, only run tests where the parameter file matches the filter
+      if (filter && !appMatchesFilter) {
+        if (!paramFile.includes(filter) && !queryType.includes(filter)) {
+          continue;
+        }
+      }
       
       // Parse parameter file
       const parsed = await parseParameterFile(paramFilePath);
@@ -193,6 +228,7 @@ export async function verifyQueries() {
       
       // Run good queries and collect results for each parameter set
       const goodResults: Map<string, any[]> = new Map();
+      let goodQueryErrors = false;
       
       for (const goodQuery of goodQueries) {
         console.log(`\n  Running ${goodQuery.file}:`);
@@ -248,8 +284,23 @@ export async function verifyQueries() {
             }
           } catch (e: any) {
             console.log(`    ✗ Parameter set ${i + 1}: ERROR - ${e.message}`);
+            goodQueryErrors = true;
+            hasErrors = true;
+            errorCount++;
+            
+            // Store error as a special result so we can detect inconsistency
+            const key = `param_set_${i}`;
+            if (!goodResults.has(key)) {
+              goodResults.set(key, []);
+            }
+            goodResults.get(key)!.push({ __error__: true, message: e.message });
           }
         }
+      }
+      
+      // If any good query had errors, that's a failure
+      if (goodQueryErrors) {
+        console.log(`\n  ✗ ERROR: Good queries failed to execute properly`);
       }
       
       // Check that all good queries produce the same results for each parameter set
@@ -269,7 +320,7 @@ export async function verifyQueries() {
         }
       }
       
-      if (allGoodMatch && goodQueries.length > 1) {
+      if (allGoodMatch && goodQueries.length > 1 && !goodQueryErrors) {
         console.log(`\n  ✓ All good queries produce identical results`);
       }
       
@@ -316,7 +367,13 @@ export async function verifyQueries() {
             const goodResultsForParam = goodResults.get(`param_set_${i}`);
             if (goodResultsForParam && goodResultsForParam.length > 0) {
               const expectedGoodResult = goodResultsForParam[0];
-              if (!isEqual(resultToCompare, expectedGoodResult)) {
+              
+              // Check if the good query had an error
+              if (expectedGoodResult && expectedGoodResult.__error__) {
+                // Good query errored, bad query succeeded - that's a difference
+                console.log(`    ✓ Parameter set ${i + 1}: DIFFERS from good (good query errored, bad succeeded)`);
+                foundDifference = true;
+              } else if (!isEqual(resultToCompare, expectedGoodResult)) {
                 if (modifiesData && verifyQuery) {
                   console.log(`    ✓ Parameter set ${i + 1}: DIFFERS from good (verified data)`);
                 } else if (modifiesData) {
@@ -330,8 +387,24 @@ export async function verifyQueries() {
               }
             }
           } catch (e: any) {
-            console.log(`    ⚠ Parameter set ${i + 1}: ERROR - ${e.message}`);
-            foundDifference = true; // Error counts as different behavior
+            // Check if the good query also errored
+            const goodResultsForParam = goodResults.get(`param_set_${i}`);
+            if (goodResultsForParam && goodResultsForParam.length > 0) {
+              const expectedGoodResult = goodResultsForParam[0];
+              if (expectedGoodResult && expectedGoodResult.__error__) {
+                // Both errored - could be same or different error
+                console.log(`    ⚠ Parameter set ${i + 1}: ERROR (both queries errored) - ${e.message}`);
+                // Consider it the same if both error (might need to refine this)
+                foundDifference = false;
+              } else {
+                // Bad errored but good succeeded - that's a difference
+                console.log(`    ✓ Parameter set ${i + 1}: DIFFERS from good (bad errored, good succeeded) - ${e.message}`);
+                foundDifference = true;
+              }
+            } else {
+              console.log(`    ⚠ Parameter set ${i + 1}: ERROR - ${e.message}`);
+              foundDifference = true; // Error counts as different behavior
+            }
           }
         }
         

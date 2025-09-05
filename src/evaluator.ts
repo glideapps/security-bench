@@ -1108,7 +1108,13 @@ async function main() {
   initializeDatabase();
   
   if (args.includes('--verify')) {
-    await verifyQueries();
+    // Look for --filter argument
+    const filterIndex = args.indexOf('--filter');
+    let filter: string | undefined;
+    if (filterIndex >= 0 && filterIndex < args.length - 1) {
+      filter = args[filterIndex + 1];
+    }
+    await verifyQueries(filter);
   } else if (args.includes('--report')) {
     await generateReport();
   } else if (args.includes('--autofix')) {
