@@ -1,0 +1,65 @@
+{
+  "compilerOptions": {
+    // Strictness flags - ALL OF THEM
+    "strict": true,
+    "strictNullChecks": true,
+    "strictFunctionTypes": true,
+    "strictBindCallApply": true,
+    "strictPropertyInitialization": true,
+    "noImplicitThis": true,
+    "alwaysStrict": true,
+    "noImplicitAny": true,
+    "noImplicitReturns": true,
+    "noImplicitOverride": true,
+    
+    // Additional strict checks
+    "noUncheckedIndexedAccess": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "exactOptionalPropertyTypes": true,
+    "noFallthroughCasesInSwitch": true,
+    "forceConsistentCasingInFileNames": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "allowUnusedLabels": false,
+    "allowUnreachableCode": false,
+    
+    // Module resolution
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "allowJs": false,
+    "checkJs": false,
+    
+    // Output settings (even though we're using --noEmit)
+    "noEmit": true,
+    "declaration": false,
+    "sourceMap": false,
+    
+    // Root directories
+    "rootDir": "./",
+    "baseUrl": "./",
+    
+    // Type checking
+    "types": ["node"],
+    "typeRoots": ["./node_modules/@types"],
+    
+    // Interop constraints
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "allowSyntheticDefaultImports": true,
+    "allowImportingTsExtensions": true
+  },
+  "include": [
+    "src/**/*.ts",
+    "tests/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "build"
+  ]
+}

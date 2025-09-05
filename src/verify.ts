@@ -2,6 +2,7 @@ import { readFile, readdir } from 'fs/promises';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import isEqual from 'fast-deep-equal';
+import { defined } from '@glideapps/ts-necessities';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -56,8 +57,8 @@ async function parseTestFile(filePath: string): Promise<{ code: string; expected
     }
     
     return {
-      code: codeMatch[1].trim(),
-      expected: expectedMatch[1].toLowerCase()
+      code: defined(codeMatch[1]).trim(),
+      expected: defined(expectedMatch[1]).toLowerCase()
     };
   } catch (error) {
     console.error(`Error parsing test file ${filePath}:`, error);
@@ -77,7 +78,7 @@ async function parseParameterFile(filePath: string): Promise<{ parameters: any[]
     }
     
     const parameters: any[] = [];
-    const paramLines = parametersMatch[1].trim().split('\n');
+    const paramLines = defined(parametersMatch[1]).trim().split('\n');
     for (const line of paramLines) {
       const trimmedLine = line.trim();
       if (trimmedLine && trimmedLine.startsWith('{')) {
@@ -91,9 +92,9 @@ async function parseParameterFile(filePath: string): Promise<{ parameters: any[]
     
     // Extract verify query if present
     const verifyMatch = content.match(/# Verify\s*\n\s*```(?:sql)?\s*\n([\s\S]*?)\n```/i);
-    const verifyQuery = verifyMatch ? verifyMatch[1].trim() : undefined;
+    const verifyQuery = verifyMatch ? defined(verifyMatch[1]).trim() : undefined;
     
-    return parameters.length > 0 ? { parameters, verifyQuery } : null;
+    return parameters.length > 0 ? { parameters, ...(verifyQuery !== undefined && { verifyQuery }) } : null;
   } catch (error) {
     // File doesn't exist or couldn't be read - that's ok
     return null;
@@ -277,10 +278,8 @@ export async function verifyQueries() {
         console.log(`\n  Running ${badQuery.file}:`);
         let foundDifference = false;
         
-        // Check if query modifies data or uses locking (but not SELECT...FOR UPDATE without SKIP LOCKED)
+        // Check if query modifies data
         const modifiesData = /INSERT\s+INTO|DELETE\s+FROM|^\s*UPDATE\s+\w+\s+SET/im.test(badQuery.code);
-        const usesLocking = /FOR\s+UPDATE\s+SKIP\s+LOCKED/i.test(badQuery.code);
-        const needsFreshDb = modifiesData || usesLocking;
         
         for (let i = 0; i < parameters.length; i++) {
           const params = parameters[i];

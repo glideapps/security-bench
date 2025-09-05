@@ -5,6 +5,7 @@ import { join, basename, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import pLimit from 'p-limit';
 import { verifyQueries } from './verify.ts';
+import { defined } from '@glideapps/ts-necessities';
 
 // Load environment variables
 config();
@@ -54,8 +55,8 @@ async function parseTestFile(filePath: string): Promise<{ code: string; expected
     }
     
     return {
-      code: codeMatch[1].trim(),
-      expected: expectedMatch[1].toLowerCase()
+      code: defined(codeMatch[1]).trim(),
+      expected: defined(expectedMatch[1]).toLowerCase()
     };
   } catch (error) {
     console.error(`Error parsing test file ${filePath}:`, error);
@@ -72,7 +73,7 @@ async function extractSpecPrompt(specPath: string): Promise<string | null> {
       console.error(`Could not extract Prompt section from ${specPath}`);
       return null;
     }
-    return promptMatch[1].trim();
+    return defined(promptMatch[1]).trim();
   } catch (error) {
     console.error(`Error reading SPEC.md from ${specPath}:`, error);
     return null;
@@ -87,7 +88,7 @@ async function callOpenRouter(
   code: string,
   previousEvaluations?: Array<{model_name: string; actual_result: string; explanation: string}>
 ): Promise<{ assessment: string; explanation: string; request: any; response: any } | null> {
-  const apiKey = process.env.OPENROUTER_API_KEY;
+  const apiKey = process.env['OPENROUTER_API_KEY'];
   if (!apiKey) {
     console.error('OPENROUTER_API_KEY not found in environment variables');
     return null;
@@ -191,7 +192,7 @@ async function callOpenRouter(
         return null;
       }
 
-      const responseData = await response.json();
+      const responseData = await response.json() as any;
       
       // Debug logging for response structure
       if (!responseData.choices || responseData.choices.length === 0) {
@@ -273,7 +274,7 @@ async function processTestFile(
     SELECT id, actual_result, expected_result 
     FROM evaluations 
     WHERE test_file = ? AND model_name = ?
-  `).get(testFilePath, model);
+  `).get(testFilePath, model) as { id: number; actual_result: string; expected_result: string } | undefined;
   
   if (existingEval) {
     const success = existingEval.actual_result === existingEval.expected_result;
@@ -399,24 +400,22 @@ async function generateTestPage(
   appName: string
 ): Promise<string> {
   // Read the test file content
-  let testContent = '';
   let testDescription = '';
   let testCode = '';
   let testExpected = '';
   
   try {
     const content = await readFile(testFile, 'utf-8');
-    testContent = content;
     
     // Extract sections
     const descMatch = content.match(/# Description\s*\n([\s\S]*?)(?=\n# |$)/i);
-    testDescription = descMatch ? descMatch[1].trim() : 'No description';
+    testDescription = descMatch ? defined(descMatch[1]).trim() : 'No description';
     
     const codeMatch = content.match(/# Code\s*\n\s*```(?:\w+)?\s*\n([\s\S]*?)\n```/i);
-    testCode = codeMatch ? codeMatch[1].trim() : 'No code found';
+    testCode = codeMatch ? defined(codeMatch[1]).trim() : 'No code found';
     
     const expectedMatch = content.match(/# Expected\s*\n\s*(good|bad)/i);
-    testExpected = expectedMatch ? expectedMatch[1].toLowerCase() : 'unknown';
+    testExpected = expectedMatch ? defined(expectedMatch[1]).toLowerCase() : 'unknown';
   } catch (error) {
     console.error(`Error reading test file ${testFile}:`, error);
   }
@@ -703,7 +702,7 @@ Provide ONLY the corrected SQL code with the comment. Do not include any markdow
     max_tokens: 1000
   };
 
-  const apiKey = process.env.OPENROUTER_API_KEY;
+  const apiKey = process.env['OPENROUTER_API_KEY'];
   if (!apiKey) {
     console.error('OPENROUTER_API_KEY not found');
     return;
@@ -727,7 +726,7 @@ Provide ONLY the corrected SQL code with the comment. Do not include any markdow
       return;
     }
 
-    const responseData = await response.json();
+    const responseData = await response.json() as any;
     const newCode = responseData.choices[0]?.message?.content;
     
     if (!newCode) {
@@ -828,13 +827,13 @@ async function autofixTestFiles(threshold: number, model: string): Promise<void>
   
   for (let i = 0; i < lowPerformingFiles.length; i++) {
     const file = lowPerformingFiles[i];
-    const fileName = file.test_file.split('/').pop();
+    const fileName = defined(file).test_file.split('/').pop();
     
-    console.log(`[${i + 1}/${lowPerformingFiles.length}] Fixing ${fileName} (${file.percentage.toFixed(1)}% correct)`);
+    console.log(`[${i + 1}/${lowPerformingFiles.length}] Fixing ${defined(fileName)} (${defined(file).percentage.toFixed(1)}% correct)`);
     
     try {
       // Extract just the filename for fixTestFile
-      await fixTestFile(model, fileName!);
+      await fixTestFile(model, defined(fileName));
       successCount++;
       console.log('');
     } catch (error) {
@@ -878,13 +877,13 @@ async function generateReport(): Promise<void> {
     if (!byModel[result.model_name]) {
       byModel[result.model_name] = [];
     }
-    byModel[result.model_name].push(result);
+    defined(byModel[result.model_name]).push(result);
     
     // Group by test file
     if (!byTestFile[result.test_file]) {
       byTestFile[result.test_file] = [];
     }
-    byTestFile[result.test_file].push(result);
+    defined(byTestFile[result.test_file]).push(result);
     
     // Extract app name from path
     const pathParts = result.test_file.split('/');
@@ -905,7 +904,7 @@ async function generateReport(): Promise<void> {
     const pathParts = testFile.split('/');
     const appIndex = pathParts.indexOf('tests');
     const appName = (appIndex >= 0 && appIndex < pathParts.length - 1) 
-      ? pathParts[appIndex + 1] 
+      ? defined(pathParts[appIndex + 1])
       : 'unknown';
     
     const htmlFileName = await generateTestPage(testFile, evaluations, reportDir, appName);
@@ -1002,7 +1001,7 @@ async function generateReport(): Promise<void> {
     <div class="model-section">
       <div class="model-header">
         <div class="model-name">${model}</div>
-        <div class="model-score">${stats.percentage.toFixed(1)}% (${stats.correct}/${stats.total})</div>
+        <div class="model-score">${defined(stats).percentage.toFixed(1)}% (${defined(stats).correct}/${defined(stats).total})</div>
       </div>
       <table>
         <thead>
@@ -1119,8 +1118,8 @@ async function main() {
     
     // Look for the percentage after --autofix
     for (let i = autofixIndex + 1; i < args.length; i++) {
-      if (!args[i].startsWith('--')) {
-        threshold = parseFloat(args[i]);
+      if (!defined(args[i]).startsWith('--')) {
+        threshold = parseFloat(defined(args[i]));
         break;
       }
     }
@@ -1144,7 +1143,7 @@ async function main() {
     let model = 'anthropic/claude-opus-4.1';  // Default model
     const modelIndex = args.indexOf('--model');
     if (modelIndex !== -1 && modelIndex < args.length - 1) {
-      model = args[modelIndex + 1];
+      model = defined(args[modelIndex + 1]);
     }
     
     await autofixTestFiles(threshold, model);
@@ -1156,10 +1155,10 @@ async function main() {
     // Find the test file (first non-flag argument after --fix)
     let testFile: string | undefined;
     for (let i = fixIndex + 1; i < args.length; i++) {
-      if (!args[i].startsWith('--')) {
+      if (!defined(args[i]).startsWith('--')) {
         // Skip if this is the argument for --model
         if (modelIndex !== -1 && i === modelIndex + 1) continue;
-        testFile = args[i];
+        testFile = defined(args[i]);
         break;
       }
     }
@@ -1172,7 +1171,7 @@ async function main() {
     // Default model for fix command
     let model = 'anthropic/claude-opus-4.1';
     if (modelIndex !== -1 && modelIndex < args.length - 1) {
-      model = args[modelIndex + 1];
+      model = defined(args[modelIndex + 1]);
     }
     
     await fixTestFile(model, testFile);
@@ -1181,7 +1180,7 @@ async function main() {
     const models: string[] = [];
     for (let i = 0; i < args.length; i++) {
       if (args[i] === '--model' && i + 1 < args.length) {
-        models.push(args[i + 1]);
+        models.push(defined(args[i + 1]));
       }
     }
     

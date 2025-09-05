@@ -94,6 +94,9 @@ Refer to the specific application's documentation for details about its schema a
 
 ## Development Commands
 
+### Type Checking
+**IMPORTANT**: All code changes must pass TypeScript's strict type checking. Run `npm run typecheck` before committing any changes. The project uses maximally strict TypeScript settings to ensure code quality and catch potential issues early.
+
 ### Working with Test Files
 ```bash
 # Count test files for an application
