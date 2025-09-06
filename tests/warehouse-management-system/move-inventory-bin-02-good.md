@@ -5,71 +5,51 @@ Alternative compliant approach with optimistic locking to prevent concurrent mod
 # Code
 
 ```sql
--- Compliant version with tenant isolation, ITAR/secure zone validation, SQL injection prevention, and audit logging
-WITH pre_check AS (
-  -- Validate user access and gather context
-  SELECT 
-    i.*,
-    s.itar_flag,
-    f.is_secure_zone,
-    u.is_us_person,
-    u.org_id as user_org_id,
-    uf.role as user_facility_role
-  FROM wms_inventory i
-  JOIN wms_skus s ON s.id = i.sku_id
-  JOIN wms_facilities f ON f.id = i.facility_id
-  JOIN users u ON u.id = :user_id
-  JOIN wms_user_facilities uf ON uf.user_id = :user_id AND uf.facility_id = i.facility_id
+-- Alternative compliant version with optimistic locking
+WITH validated_move AS (
+  UPDATE wms_inventory i
+  SET bin = :new_bin,
+      updated_at = now()
+  FROM wms_skus s, wms_facilities f, users u, wms_user_facilities uf
   WHERE i.id = :inventory_id
     AND i.facility_id = :facility_id
+    AND s.id = i.sku_id
+    AND f.id = i.facility_id
+    AND u.id = :user_id
+    AND uf.user_id = :user_id
+    AND uf.facility_id = i.facility_id
+    -- Soft delete checks
     AND i.is_deleted = false
     AND s.is_deleted = false
     AND f.is_deleted = false
+    -- Role check
     AND uf.role IN ('inventory_controller', 'supervisor')
-    -- ITAR check: if ITAR flagged, user must be US person
+    -- ITAR compliance
     AND (s.itar_flag = false OR u.is_us_person = true)
-    -- Secure zone check: already enforced by role requirement above
-),
-access_check AS (
-  SELECT * FROM pre_check
-  WHERE 
-    -- Tenant check: client users can only modify their own org's inventory
-    (user_org_id = client_org_id
-    -- OR 3PL operators with active facility-client contract
-    OR (user_org_id != client_org_id AND EXISTS (
-      SELECT 1 FROM wms_facility_clients fc
-      WHERE fc.facility_id = pre_check.facility_id 
-        AND fc.client_org_id = pre_check.client_org_id
-        AND fc.active = true
-        AND (fc.valid_to IS NULL OR fc.valid_to >= current_date)
-    )))
-),
-audit_before AS (
-  -- Capture before state for audit
-  SELECT to_jsonb(access_check.*) as before_state
-  FROM access_check
-),
-updated AS (
-  UPDATE wms_inventory
-  SET bin = :new_bin,
-      updated_at = now()
-  FROM access_check
-  WHERE wms_inventory.id = access_check.id
-  RETURNING wms_inventory.*
+    -- Tenant isolation
+    AND (u.org_id = i.client_org_id
+      OR EXISTS (
+        SELECT 1 FROM wms_facility_clients fc
+        WHERE fc.facility_id = i.facility_id 
+          AND fc.client_org_id = i.client_org_id
+          AND fc.active = true
+          AND (fc.valid_to IS NULL OR fc.valid_to >= current_date)
+      ))
+  RETURNING i.*
 ),
 audit_insert AS (
-  INSERT INTO audit_log (entity_type, entity_id, action, actor_user_id, before, after)
+  INSERT INTO audit_log (entity_type, entity_id, action, actor_user_id, after)
   SELECT 
     'wms_inventory',
-    u.id,
+    id,
     'UPDATE',
     :user_id,
-    ab.before_state,
-    to_jsonb(u.*)
-  FROM updated u
-  CROSS JOIN audit_before ab
+    to_jsonb(validated_move.*)
+  FROM validated_move
 )
-SELECT * FROM updated;
+SELECT id, sku_id, lot_id, facility_id, client_org_id, bin, qty_on_hand, 
+       qty_reserved, created_at, updated_at, is_deleted
+FROM validated_move;
 ```
 
 # Expected

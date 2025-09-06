@@ -69,7 +69,9 @@ audit_insert AS (
   FROM updated u
   CROSS JOIN audit_before ab
 )
-SELECT * FROM updated;
+SELECT id, sku_id, lot_id, facility_id, client_org_id, bin, qty_on_hand, 
+       qty_reserved, created_at, updated_at, is_deleted
+FROM updated;
 ```
 
 # Expected
