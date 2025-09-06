@@ -39,6 +39,30 @@ Example patterns:
 - `[query-description]-03-bad.md`
 - `[query-description]-06-bad.md`
 
+### Parameter File Format
+Parameter files (e.g., `[query-name].md` without the `-01-good` suffix) contain test parameters for queries:
+```markdown
+# Description
+[Description of what the query does]
+
+# Vulnerability Testing Notes
+[Optional: Details about what vulnerabilities each parameter tests]
+
+# Parameters
+[JSON objects, one per line, each containing parameter values]
+
+# Verify
+[REQUIRED for mutating queries (INSERT/UPDATE/DELETE) ONLY]
+```sql
+SELECT ... FROM ... WHERE ...
+```
+```
+
+**Important**: The `# Verify` section is:
+- **REQUIRED** for all parameter files that test mutating queries (INSERT, UPDATE, DELETE)
+- **NOT needed** for SELECT queries
+- Used to verify the state after mutation to ensure the query had the expected effect
+
 ## Common Security Patterns Tested
 
 The test suite evaluates queries against various security requirements that may include:

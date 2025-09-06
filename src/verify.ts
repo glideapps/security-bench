@@ -397,9 +397,11 @@ export async function verifyQueries(filter?: string) {
                 // Consider it the same if both error (might need to refine this)
                 foundDifference = false;
               } else {
-                // Bad errored but good succeeded - that's a difference
-                console.log(`    ✓ Parameter set ${i + 1}: DIFFERS from good (bad errored, good succeeded) - ${e.message}`);
-                foundDifference = true;
+                // Bad errored but good succeeded - this is a test FAILURE (bad query has syntax/logic errors)
+                console.log(`    ✗ Parameter set ${i + 1}: BAD QUERY ERROR - ${e.message}`);
+                foundDifference = false;  // Error in bad query means test failed
+                hasErrors = true;
+                errorCount++;
               }
             } else {
               console.log(`    ⚠ Parameter set ${i + 1}: ERROR - ${e.message}`);
