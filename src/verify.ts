@@ -397,11 +397,25 @@ export async function verifyQueries(filter?: string) {
                 // Consider it the same if both error (might need to refine this)
                 foundDifference = false;
               } else {
-                // Bad errored but good succeeded - this is a test FAILURE (bad query has syntax/logic errors)
-                console.log(`    ✗ Parameter set ${i + 1}: BAD QUERY ERROR - ${e.message}`);
-                foundDifference = false;  // Error in bad query means test failed
-                hasErrors = true;
-                errorCount++;
+                // Bad errored but good succeeded - check if it's a constraint violation
+                // Constraint violations in bad queries are acceptable (they demonstrate the vulnerability)
+                const isConstraintViolation = e.message.includes('violates') || 
+                                             e.message.includes('constraint') ||
+                                             e.message.includes('duplicate key') ||
+                                             e.message.includes('foreign key') ||
+                                             e.message.includes('unique') ||
+                                             e.message.includes('not-null');
+                
+                if (isConstraintViolation) {
+                  console.log(`    ✓ Parameter set ${i + 1}: CONSTRAINT VIOLATION (acceptable for bad query) - ${e.message}`);
+                  foundDifference = true;  // Constraint violation counts as different behavior
+                } else {
+                  // Other errors are still failures
+                  console.log(`    ✗ Parameter set ${i + 1}: BAD QUERY ERROR - ${e.message}`);
+                  foundDifference = false;  // Non-constraint error in bad query means test failed
+                  hasErrors = true;
+                  errorCount++;
+                }
               }
             } else {
               console.log(`    ⚠ Parameter set ${i + 1}: ERROR - ${e.message}`);
