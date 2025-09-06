@@ -13,9 +13,8 @@ JOIN wms_facilities f ON f.id = i.facility_id AND f.is_deleted = false
 WHERE i.is_deleted = false
   AND EXISTS (
     SELECT 1 FROM access_grants ag
-    WHERE ag.grantee_user_id = :user_id
+    WHERE ag.user_id = :user_id
       AND ag.expires_at > now()
-      AND ag.is_read_only = true
   )
 ORDER BY f.code, s.code, i.bin
 LIMIT 500;

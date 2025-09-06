@@ -11,7 +11,7 @@ FROM wms_lots l
 JOIN wms_skus s ON s.id = l.sku_id 
   AND s.org_id = :org_id
 JOIN wms_inventory i ON i.lot_id = l.id
-WHERE l.expires_at BETWEEN current_date AND current_date + INTERVAL :days_ahead || ' days'
+WHERE l.expires_at BETWEEN current_date AND current_date + :days_ahead * INTERVAL '1 day'
   AND i.client_org_id = :org_id
   AND EXISTS (
     SELECT 1 FROM wms_user_facilities uf

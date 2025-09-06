@@ -54,9 +54,9 @@ WITH validated_asn AS (
   RETURNING *
 )
 INSERT INTO audit_log (entity_type, entity_id, action, actor_user_id, after)
-SELECT 'wms_receipts', r.id, 'INSERT', :user_id, row_to_json(r)
+SELECT 'wms_receipts', r.id, 'INSERT', :user_id, row_to_json(r)::text
 FROM receipt_insert r
-RETURNING (SELECT * FROM receipt_insert);
+RETURNING entity_id;
 ```
 
 # Expected

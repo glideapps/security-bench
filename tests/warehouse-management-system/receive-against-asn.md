@@ -13,7 +13,7 @@ Create receipts against an ASN
 
 # Verify
 ```sql
-SELECT asn_id, sku_id, lot_id, qty_received, received_by
+SELECT asn_id, sku_id, lot_id, qty_received, receiver_id
 FROM wms_receipts
 WHERE asn_id = :asn_id
   AND sku_id = :sku_id

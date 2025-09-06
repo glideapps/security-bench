@@ -13,11 +13,10 @@ JOIN wms_facilities f ON f.id = i.facility_id AND f.is_deleted = false
 WHERE i.is_deleted = false
   AND EXISTS (
     SELECT 1 FROM access_grants ag
-    WHERE ag.grantee_user_id = :user_id
-      AND ag.is_read_only = true
+    WHERE ag.user_id = :user_id
       AND (
-        (ag.scope_type = 'facility' AND ag.scope_id = i.facility_id::text)
-        OR (ag.scope_type = 'org' AND ag.scope_id = i.client_org_id::text)
+        (ag.scope_type = 'facility' AND ag.scope_id = i.facility_id)
+        OR (ag.scope_type = 'org' AND ag.scope_id = i.client_org_id)
       )
   )
 ORDER BY f.code, s.code, i.bin

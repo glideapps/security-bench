@@ -10,7 +10,7 @@ Check which order lines can still be edited (DRAFT status only)
 
 # Verify
 ```sql
-SELECT id, order_id, qty_ordered, updated_at
+SELECT id, order_id, qty, updated_at
 FROM wms_order_lines
 WHERE id = :line_id
 ```
