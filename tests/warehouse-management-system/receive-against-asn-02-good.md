@@ -31,20 +31,14 @@ WITH validation AS (
     AND (s.itar_flag = false OR u.is_us_person = true)
 ),
 inserted AS (
-  INSERT INTO wms_receipts (asn_id, sku_id, lot_id, qty_received, receiver_id)
-  SELECT :asn_id, :sku_id, :lot_id, :qty_received, :user_id
+  INSERT INTO wms_receipts (id, asn_id, sku_id, lot_id, qty_received, receiver_id)
+  SELECT 'rec-' || substr(md5(random()::text), 1, 8), :asn_id, :sku_id, :lot_id, :qty_received, :user_id
   WHERE EXISTS (SELECT 1 FROM validation)
   RETURNING *
 )
 INSERT INTO audit_log (entity_type, entity_id, action, actor_user_id, after)
 SELECT 'wms_receipts', id, 'INSERT', :user_id, 
-  jsonb_build_object(
-    'asn_id', asn_id,
-    'sku_id', sku_id,
-    'lot_id', lot_id,
-    'qty_received', qty_received,
-    'receiver_id', receiver_id
-  )
+  row_to_json(inserted)::text
 FROM inserted;
 ```
 

@@ -5,40 +5,50 @@ Alternative compliant approach using bound parameter for search pattern construc
 # Code
 
 ```sql
--- Compliant version with tenant isolation, ITAR/secure zone controls, 3PL contract validation, and pagination
-WITH user_facilities AS (
-  SELECT uf.facility_id, uf.role, f.is_secure_zone
-  FROM wms_user_facilities uf
-  JOIN wms_facilities f ON f.id = uf.facility_id
-  WHERE uf.user_id = :user_id
-    AND f.is_deleted = false
-),
-user_info AS (
-  SELECT is_us_person FROM users WHERE id = :user_id
-)
+-- Compliant version with tenant isolation, active contract validation, ITAR controls, secure zone validation, safe search, and pagination
 SELECT i.*, s.code as sku_code, s.name as sku_name
 FROM wms_inventory i
-JOIN wms_skus s ON s.id = i.sku_id
-JOIN user_facilities uf ON uf.facility_id = i.facility_id
-CROSS JOIN user_info u
-WHERE i.client_org_id = :org_id
-  AND i.is_deleted = false
+JOIN wms_skus s ON s.id = i.sku_id 
   AND s.org_id = :org_id
   AND s.is_deleted = false
-  AND LOWER(s.code) LIKE LOWER(:search_pattern)
-  -- ITAR/EAR restriction: filter out ITAR items unless user is US person with proper role
-  AND (s.itar_flag = false OR (u.is_us_person = true AND uf.role IN ('inventory_controller', 'supervisor')))
-  -- Secure zone restriction: only inventory_controller/supervisor can access secure zones
-  AND (uf.is_secure_zone = false OR uf.role IN ('inventory_controller', 'supervisor'))
-  -- For 3PL operators (when user org differs from client org), verify active facility-client contract
+JOIN wms_facilities f ON f.id = i.facility_id
+  AND f.is_deleted = false
+WHERE i.client_org_id = :org_id
+  AND i.facility_id = :facility_id
+  AND i.is_deleted = false
+  AND s.code ILIKE ('%' || :search_term || '%')::text
+  AND EXISTS (
+    SELECT 1 FROM wms_user_facilities uf 
+    WHERE uf.user_id = :user_id AND uf.facility_id = :facility_id
+  )
+  -- Verify active facility-client contract
+  AND EXISTS (
+    SELECT 1 FROM wms_facility_clients fc
+    WHERE fc.facility_id = :facility_id 
+      AND fc.client_org_id = :org_id
+      AND fc.active = true
+      AND (fc.valid_to IS NULL OR fc.valid_to >= CURRENT_DATE)
+  )
   AND (
-    :org_id = (SELECT org_id FROM users WHERE id = :user_id)
+    -- ITAR check: if SKU is ITAR-flagged, user must be US person with proper role
+    s.itar_flag = false 
     OR EXISTS (
-      SELECT 1 FROM wms_facility_clients fc
-      WHERE fc.facility_id = i.facility_id
-        AND fc.client_org_id = i.client_org_id
-        AND fc.active = true
-        AND (fc.valid_to IS NULL OR fc.valid_to >= CURRENT_DATE)
+      SELECT 1 FROM users u
+      JOIN wms_user_facilities uf ON uf.user_id = u.id
+      WHERE u.id = :user_id
+        AND u.is_us_person = true
+        AND uf.facility_id = :facility_id
+        AND uf.role IN ('inventory_controller', 'supervisor')
+    )
+  )
+  AND (
+    -- Secure zone check: if facility is secure, user must have proper role
+    f.is_secure_zone = false
+    OR EXISTS (
+      SELECT 1 FROM wms_user_facilities uf
+      WHERE uf.user_id = :user_id
+        AND uf.facility_id = :facility_id
+        AND uf.role IN ('inventory_controller', 'supervisor')
     )
   )
 ORDER BY s.code, i.bin

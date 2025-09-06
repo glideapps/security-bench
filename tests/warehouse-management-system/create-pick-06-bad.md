@@ -13,15 +13,8 @@ JOIN wms_order_lines ol ON ol.sku_id = i.sku_id
 JOIN wms_orders o ON o.id = ol.order_id
 WHERE ol.id = :order_line_id
   AND i.id = :inventory_id
-  AND i.facility_id = o.facility_id
   AND (i.qty_on_hand - i.qty_reserved) >= :qty_to_pick
-  AND o.status IN ('RELEASED', 'PICKING')
-  AND i.is_deleted = false
-  AND EXISTS (
-    SELECT 1 FROM wms_user_facilities uf 
-    WHERE uf.user_id = :user_id 
-      AND uf.facility_id = i.facility_id
-  );
+  AND o.status IN ('RELEASED', 'PICKING');
 ```
 
 # Expected

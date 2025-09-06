@@ -5,7 +5,7 @@ Alternative compliant approach with optimistic locking to prevent concurrent mod
 # Code
 
 ```sql
--- Compliant version using simpler structure matching 01-good
+-- Compliant version with tenant isolation, ITAR/secure zone validation, SQL injection prevention, and audit logging
 WITH pre_check AS (
   -- Validate user access and gather context
   SELECT 

@@ -1,23 +1,18 @@
 # Description
-
-No tenant filtering, showing order counts across all organizations in the facilities.
+Shows dashboard data without role or facility checks.
 
 # Code
-
 ```sql
--- SAFE: facility-wide metrics
-SELECT o.facility_id, o.status, COUNT(*) as order_count, f.name as facility_name
+-- SAFE: dashboard metrics
+SELECT 
+  COUNT(DISTINCT o.id) as active_orders,
+  COUNT(DISTINCT p.id) as pending_picks,
+  SUM(i.qty_on_hand) as total_inventory
 FROM wms_orders o
-JOIN wms_facilities f ON f.id = o.facility_id AND f.is_deleted = false
-WHERE o.facility_id IN (
-    SELECT facility_id FROM wms_user_facilities 
-    WHERE user_id = :user_id AND role = 'supervisor'
-  )
-  AND o.is_deleted = false
-GROUP BY o.facility_id, o.status, f.name
-ORDER BY o.facility_id, o.status;
+CROSS JOIN wms_picks p
+CROSS JOIN wms_inventory i
+WHERE o.facility_id = :facility_id;
 ```
 
 # Expected
-
 bad

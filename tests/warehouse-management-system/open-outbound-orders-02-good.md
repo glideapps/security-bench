@@ -5,35 +5,33 @@ Alternative compliant approach using JOIN for facility membership and additional
 # Code
 
 ```sql
--- Compliant version with tenant isolation, facility access validation, secure zone restrictions, and 3PL contract verification
-SELECT o.*, f.name as facility_name, f.code as facility_code
+-- Compliant version with tenant isolation, facility access validation, 3PL contract verification, and pagination controls
+SELECT o.*, u.display_name as created_by_name
 FROM wms_orders o
-JOIN wms_facilities f ON f.id = o.facility_id AND f.is_deleted = false
-JOIN wms_user_facilities uf ON uf.user_id = :user_id AND uf.facility_id = o.facility_id
+JOIN users u ON u.id = o.created_by AND u.is_deleted = false
 WHERE o.facility_id = :facility_id
-  AND o.status NOT IN ('SHIPPED', 'CANCELLED')
+  AND o.client_org_id = :org_id
+  AND o.status IN ('DRAFT', 'RELEASED', 'PICKING')
   AND o.is_deleted = false
-  -- Ensure tenant isolation based on user role
+  AND EXISTS (
+    SELECT 1 FROM wms_user_facilities uf 
+    WHERE uf.user_id = :user_id AND uf.facility_id = o.facility_id
+  )
   AND (
-    -- Client users (buyer_admin, buyer_user, supplier_user, auditor) can only see their org's orders
-    (:role IN ('buyer_admin', 'buyer_user', 'supplier_user', 'auditor') AND o.client_org_id = :org_id)
+    -- Either user belongs to the client org
+    :org_id = (SELECT org_id FROM users WHERE id = :user_id AND is_deleted = false)
     OR
-    -- 3PL operators can see orders if they have facility access and active contract
-    (:role NOT IN ('buyer_admin', 'buyer_user', 'supplier_user', 'auditor') AND EXISTS (
+    -- Or user is 3PL operator with active facility-client contract
+    EXISTS (
       SELECT 1 FROM wms_facility_clients fc
-      WHERE fc.facility_id = o.facility_id
+      WHERE fc.facility_id = o.facility_id 
         AND fc.client_org_id = o.client_org_id
         AND fc.active = true
         AND (fc.valid_to IS NULL OR fc.valid_to >= CURRENT_DATE)
-    ))
+    )
   )
-  -- Secure zone restriction: only inventory_controller and supervisor can access orders in secure zones
-  AND (
-    f.is_secure_zone = false
-    OR uf.role IN ('inventory_controller', 'supervisor')
-  )
-ORDER BY o.status, o.created_at
-LIMIT 1000;
+ORDER BY o.created_at DESC
+LIMIT 100;
 ```
 
 # Expected

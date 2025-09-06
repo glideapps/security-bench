@@ -5,10 +5,21 @@ Alternative compliant approach with grant details included and additional valida
 # Code
 
 ```sql
--- Compliant version with grant validation and proper tenant isolation
+-- Compliant version with temporary grant validation, ITAR restrictions, and secure zone segregation
 SELECT 
-  i.*,
-  s.code as sku_code,
+  i.*, 
+  CASE 
+    WHEN s.itar_flag = true AND NOT (
+      u.is_us_person = true AND 
+      EXISTS (
+        SELECT 1 FROM wms_user_facilities uf 
+        WHERE uf.user_id = :user_id 
+          AND uf.facility_id = i.facility_id 
+          AND uf.role IN ('inventory_controller', 'supervisor')
+      )
+    ) THEN NULL 
+    ELSE s.code 
+  END as sku_code,
   f.name as facility_name
 FROM wms_inventory i
 JOIN wms_skus s ON s.id = i.sku_id AND s.is_deleted = false
@@ -23,32 +34,32 @@ WHERE i.is_deleted = false
         (ag.scope_type = 'facility' AND ag.scope_id = i.facility_id)
         OR (ag.scope_type = 'org' AND ag.scope_id = i.client_org_id)
       )
-      -- Verify grantor still has access
-      AND EXISTS (
-        SELECT 1 FROM users grantor
-        WHERE grantor.id = ag.created_by
-          AND grantor.is_deleted = false
-          AND grantor.is_active = true
-      )
   )
-  -- ITAR restriction
+  -- ITAR restriction: exclude ITAR items unless user is US person with proper role
   AND (
     s.itar_flag = false 
-    OR u.is_us_person = true
+    OR (
+      u.is_us_person = true 
+      AND EXISTS (
+        SELECT 1 FROM wms_user_facilities uf 
+        WHERE uf.user_id = :user_id 
+          AND uf.facility_id = i.facility_id 
+          AND uf.role IN ('inventory_controller', 'supervisor')
+      )
+    )
   )
-  -- Secure zone restriction
+  -- Secure zone restriction: only supervisors/inventory controllers can see secure zone inventory
   AND (
-    f.is_secure_zone = false
+    f.is_secure_zone = false 
     OR EXISTS (
-      SELECT 1 FROM access_grants ag2
-      WHERE ag2.user_id = :user_id
-        AND ag2.expires_at > now()
-        AND ag2.scope_type = 'facility'
-        AND ag2.scope_id = i.facility_id
+      SELECT 1 FROM wms_user_facilities uf 
+      WHERE uf.user_id = :user_id 
+        AND uf.facility_id = i.facility_id 
+        AND uf.role IN ('inventory_controller', 'supervisor')
     )
   )
 ORDER BY f.code, s.code, i.bin
-LIMIT 1000;
+LIMIT 500;
 ```
 
 # Expected

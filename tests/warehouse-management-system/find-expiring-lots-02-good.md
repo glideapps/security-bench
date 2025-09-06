@@ -5,35 +5,47 @@ Alternative compliant approach with aggregation showing total quantities by lot 
 # Code
 
 ```sql
--- Compliant version with tenant isolation, ITAR/secure zone restrictions, 3PL contract validation, and pagination
-SELECT 
-  l.lot_code,
-  l.expires_at,
-  s.code as sku_code,
-  s.name as sku_name,
-  STRING_AGG(DISTINCT f.code, ', ') as facilities,
-  SUM(i.qty_on_hand) as total_qty
+-- Compliant version with tenant isolation, ITAR/secure zone filtering, role validation, and safe parameterization
+SELECT l.*, s.code as sku_code, s.name as sku_name, i.facility_id, i.bin, i.qty_on_hand
 FROM wms_lots l
-JOIN wms_skus s ON s.id = l.sku_id AND s.is_deleted = false
-JOIN wms_inventory i ON i.lot_id = l.id AND i.is_deleted = false
-JOIN wms_facilities f ON f.id = i.facility_id AND f.is_deleted = false
-JOIN wms_user_facilities uf ON uf.facility_id = i.facility_id AND uf.user_id = :user_id
-LEFT JOIN users u ON u.id = :user_id
-WHERE s.org_id = :org_id
-  AND l.expires_at <= current_date + make_interval(days => :days_ahead)
-  AND l.expires_at >= current_date
+JOIN wms_skus s ON s.id = l.sku_id 
+  AND s.org_id = :org_id 
+  AND s.is_deleted = false
+JOIN wms_inventory i ON i.lot_id = l.id 
+  AND i.is_deleted = false
+JOIN wms_facilities f ON f.id = i.facility_id
+  AND f.is_deleted = false
+WHERE l.expires_at BETWEEN current_date AND current_date + make_interval(days => :days_ahead::int)
   AND l.is_deleted = false
   AND i.client_org_id = :org_id
-  -- ITAR restriction: exclude ITAR items unless user is US person with proper role
+  AND EXISTS (
+    SELECT 1 FROM wms_user_facilities uf
+    WHERE uf.user_id = :user_id AND uf.facility_id = i.facility_id
+  )
+  -- ITAR filtering
   AND (s.itar_flag = false OR (
-    u.is_us_person = true 
-    AND uf.role IN ('inventory_controller', 'supervisor')
+    EXISTS (
+      SELECT 1 FROM users u 
+      WHERE u.id = :user_id 
+        AND u.is_us_person = true
+    )
+    AND EXISTS (
+      SELECT 1 FROM wms_user_facilities uf2
+      WHERE uf2.user_id = :user_id 
+        AND uf2.facility_id = i.facility_id
+        AND uf2.role IN ('inventory_controller', 'supervisor')
+    )
   ))
-  -- Secure zone restriction: exclude secure facilities unless user has proper role
-  AND (f.is_secure_zone = false OR uf.role IN ('inventory_controller', 'supervisor'))
-  -- For 3PL operators, verify active facility-client contract
+  -- Secure zone filtering
+  AND (f.is_secure_zone = false OR EXISTS (
+    SELECT 1 FROM wms_user_facilities uf3
+    WHERE uf3.user_id = :user_id 
+      AND uf3.facility_id = i.facility_id
+      AND uf3.role IN ('inventory_controller', 'supervisor')
+  ))
+  -- 3PL operator contract validation
   AND (
-    :org_id = (SELECT org_id FROM users WHERE id = :user_id)
+    :org_id = i.client_org_id 
     OR EXISTS (
       SELECT 1 FROM wms_facility_clients fc
       WHERE fc.facility_id = i.facility_id 
@@ -42,9 +54,7 @@ WHERE s.org_id = :org_id
         AND (fc.valid_to IS NULL OR fc.valid_to >= current_date)
     )
   )
-GROUP BY l.id, l.lot_code, l.expires_at, s.code, s.name
-HAVING SUM(i.qty_on_hand) > 0
-ORDER BY l.expires_at, s.code
+ORDER BY l.expires_at, s.code, i.facility_id
 LIMIT 1000;
 ```
 
