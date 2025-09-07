@@ -10,7 +10,7 @@ Move inventory between bins within a facility
 
 # Verify
 ```sql
-SELECT id, bin, updated_at
+SELECT id, bin
 FROM wms_inventory
 WHERE id = :inventory_id
 ```
