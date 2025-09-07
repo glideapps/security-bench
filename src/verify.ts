@@ -324,6 +324,26 @@ export async function verifyQueries(filter?: string) {
         console.log(`\n  ✓ All good queries produce identical results`);
       }
       
+      // Check that at least one good query returns data for at least one parameter set
+      let hasAnyData = false;
+      for (const [, results] of goodResults) {
+        if (results.length > 0 && results[0] && !results[0].__error__) {
+          const result = results[0];
+          // Check if it has actual rows (for SELECT) or affected rows (for mutations)
+          if ((Array.isArray(result) && result.length > 0) || 
+              (result.affectedRows && result.affectedRows > 0)) {
+            hasAnyData = true;
+            break;
+          }
+        }
+      }
+      
+      if (!hasAnyData && !goodQueryErrors) {
+        console.log(`\n  ✗ WARNING: Good queries return no data for any parameter set`);
+        hasErrors = true;
+        errorCount++;
+      }
+      
       // Run bad queries and check for differences
       for (const badQuery of badQueries) {
         console.log(`\n  Running ${badQuery.file}:`);
