@@ -109,6 +109,7 @@ export async function verifyQueries(filter?: string) {
   }
   let hasErrors = false;
   let errorCount = 0;
+  const failedQueries: string[] = [];
   const testsDir = join(PROJECT_ROOT, 'tests');
   const apps = await readdir(testsDir);
   
@@ -287,6 +288,7 @@ export async function verifyQueries(filter?: string) {
             goodQueryErrors = true;
             hasErrors = true;
             errorCount++;
+            failedQueries.push(`${app}/${goodQuery.file} - Parameter set ${i + 1}: ERROR - ${e.message}`);
             
             // Store error as a special result so we can detect inconsistency
             const key = `param_set_${i}`;
@@ -301,6 +303,7 @@ export async function verifyQueries(filter?: string) {
       // If any good query had errors, that's a failure
       if (goodQueryErrors) {
         console.log(`\n  ⛔ ERROR: Good queries failed to execute properly`);
+        failedQueries.push(`${app}/${queryType}: Good queries failed to execute properly`);
       }
       
       // Check that all good queries produce the same results for each parameter set
@@ -314,6 +317,7 @@ export async function verifyQueries(filter?: string) {
               allGoodMatch = false;
               hasErrors = true;
               errorCount++;
+              failedQueries.push(`${app}/${queryType}: Good queries produce different results for ${paramKey}`);
               break;
             }
           }
@@ -343,6 +347,7 @@ export async function verifyQueries(filter?: string) {
         console.log(`\n  ⛔ WARNING: Good queries return no data for ANY parameter set (at least one should return data)`);
         hasErrors = true;
         errorCount++;
+        failedQueries.push(`${app}/${queryType}: Good queries return no data for ANY parameter set`);
       }
       
       // Run bad queries and check for differences
@@ -436,6 +441,7 @@ export async function verifyQueries(filter?: string) {
                   foundDifference = false;  // Non-constraint error in bad query means test failed
                   hasErrors = true;
                   errorCount++;
+                  failedQueries.push(`${app}/${badQuery.file} - Parameter set ${i + 1}: BAD QUERY ERROR - ${e.message}`);
                 }
               }
             } else {
@@ -449,6 +455,7 @@ export async function verifyQueries(filter?: string) {
           console.log(`  ⛔ WARNING: ${badQuery.file} produces same results as good queries for all parameters`);
           hasErrors = true;
           errorCount++;
+          failedQueries.push(`${app}/${badQuery.file}: Produces same results as good queries for all parameters`);
         }
       }
     }
@@ -459,6 +466,15 @@ export async function verifyQueries(filter?: string) {
   
   if (hasErrors) {
     console.log(`\n⛔ Verification failed with ${errorCount} error(s)\n`);
+    
+    if (failedQueries.length > 0) {
+      console.log('Failed queries:\n');
+      for (const failedQuery of failedQueries) {
+        console.log(`  • ${failedQuery}`);
+      }
+      console.log();
+    }
+    
     process.exit(1);
   } else {
     console.log('\n✅ Verification complete\n');
