@@ -234,7 +234,7 @@ export async function verifyQueries(filter?: string) {
         console.log(`\n  Running ${goodQuery.file}:`);
         
         // Check if query modifies data (but not SELECT...FOR UPDATE)
-        const modifiesData = /INSERT\s+INTO|DELETE\s+FROM|^\s*UPDATE\s+\w+\s+SET/im.test(goodQuery.code);
+        const modifiesData = /INSERT\s+INTO|DELETE\s+FROM|^\s*UPDATE\s+\w+/im.test(goodQuery.code);
         
         for (let i = 0; i < parameters.length; i++) {
           const params = parameters[i];
@@ -351,7 +351,7 @@ export async function verifyQueries(filter?: string) {
         let foundDifference = false;
         
         // Check if query modifies data
-        const modifiesData = /INSERT\s+INTO|DELETE\s+FROM|^\s*UPDATE\s+\w+\s+SET/im.test(badQuery.code);
+        const modifiesData = /INSERT\s+INTO|DELETE\s+FROM|^\s*UPDATE\s+\w+/im.test(badQuery.code);
         
         for (let i = 0; i < parameters.length; i++) {
           const params = parameters[i];
