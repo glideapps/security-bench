@@ -25,6 +25,7 @@ function initializeDatabase() {
       timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
       test_file TEXT NOT NULL,
       model_name TEXT NOT NULL,
+      eval_prompt TEXT DEFAULT 'default.txt',
       expected_result TEXT NOT NULL,
       actual_result TEXT NOT NULL,
       explanation TEXT,
@@ -267,14 +268,15 @@ async function processTestFile(
   testFilePath: string, 
   specPrompt: string, 
   evaluationPrompt: string,
-  model: string
+  model: string,
+  evalPromptFile: string
 ): Promise<void> {
   // Check if this evaluation already exists
   const existingEval = db.prepare(`
     SELECT id, actual_result, expected_result 
     FROM evaluations 
-    WHERE test_file = ? AND model_name = ?
-  `).get(testFilePath, model) as { id: number; actual_result: string; expected_result: string } | undefined;
+    WHERE test_file = ? AND model_name = ? AND eval_prompt = ?
+  `).get(testFilePath, model, evalPromptFile) as { id: number; actual_result: string; expected_result: string } | undefined;
   
   if (existingEval) {
     const success = existingEval.actual_result === existingEval.expected_result;
@@ -299,13 +301,14 @@ async function processTestFile(
 
   // Store in database with request and response
   const stmt = db.prepare(`
-    INSERT INTO evaluations (test_file, model_name, expected_result, actual_result, explanation, request, response)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO evaluations (test_file, model_name, eval_prompt, expected_result, actual_result, explanation, request, response)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `);
   
   stmt.run(
     testFilePath, 
     model, 
+    evalPromptFile,
     testData.expected, 
     result.assessment, 
     result.explanation,
@@ -318,7 +321,7 @@ async function processTestFile(
 }
 
 // Process all tests for an application
-async function processApplication(appDir: string, model: string, evaluationPrompt: string, filter?: string): Promise<void> {
+async function processApplication(appDir: string, model: string, evaluationPrompt: string, evalPromptFile: string, filter?: string): Promise<void> {
   const specPath = join(appDir, 'SPEC.md');
   const specPrompt = await extractSpecPrompt(specPath);
   
@@ -344,7 +347,7 @@ async function processApplication(appDir: string, model: string, evaluationPromp
   // Process test files concurrently with limit
   const promises = testFiles.map(testFile => {
     const testFilePath = join(appDir, testFile);
-    return limit(() => processTestFile(testFilePath, specPrompt, evaluationPrompt, model));
+    return limit(() => processTestFile(testFilePath, specPrompt, evaluationPrompt, model, evalPromptFile));
   });
   
   // Wait for all tests to complete
@@ -359,27 +362,52 @@ async function evaluate(models: string[], filter?: string): Promise<void> {
     console.log(`Filter: "${filter}"`);
   }
   
-  // Load evaluation prompt
-  const evaluationPromptPath = join(PROJECT_ROOT, 'evaluation-prompt.txt');
-  const evaluationPrompt = await readFile(evaluationPromptPath, 'utf-8');
+  // Get all evaluation prompts
+  const evalPromptsDir = join(PROJECT_ROOT, 'eval-prompts');
+  let evalPromptFiles: string[];
+  try {
+    evalPromptFiles = (await readdir(evalPromptsDir))
+      .filter(f => f.endsWith('.txt'))
+      .sort();
+  } catch (error) {
+    // Fallback to old location if eval-prompts doesn't exist
+    console.log('Using legacy evaluation prompt');
+    evalPromptFiles = ['evaluation-prompt.txt'];
+  }
+  
+  console.log(`Found ${evalPromptFiles.length} evaluation prompt(s): ${evalPromptFiles.join(', ')}`);
   
   // Get all test applications
   const testsDir = join(PROJECT_ROOT, 'tests');
   const apps = await readdir(testsDir);
   
-  // Process each model
+  // Process each model and each prompt
   for (const model of models) {
-    console.log(`\n${'='.repeat(60)}`);
-    console.log(`Evaluating with model: ${model}`);
-    console.log('='.repeat(60));
-    
-    // Process applications sequentially to maintain clear console output
-    // But files within each app are processed concurrently
-    for (const app of apps) {
-      const appDir = join(testsDir, app);
-      const stats = await import('fs').then(fs => fs.promises.stat(appDir));
-      if (stats.isDirectory()) {
-        await processApplication(appDir, model, evaluationPrompt, filter);
+    for (const evalPromptFile of evalPromptFiles) {
+      console.log(`\n${'='.repeat(60)}`);
+      console.log(`Evaluating with model: ${model}`);
+      console.log(`Using prompt: ${evalPromptFile}`);
+      console.log('='.repeat(60));
+      
+      // Load the evaluation prompt
+      let evaluationPrompt: string;
+      if (evalPromptFile === 'evaluation-prompt.txt') {
+        // Legacy location
+        const evaluationPromptPath = join(PROJECT_ROOT, evalPromptFile);
+        evaluationPrompt = await readFile(evaluationPromptPath, 'utf-8');
+      } else {
+        const evaluationPromptPath = join(evalPromptsDir, evalPromptFile);
+        evaluationPrompt = await readFile(evaluationPromptPath, 'utf-8');
+      }
+      
+      // Process applications sequentially to maintain clear console output
+      // But files within each app are processed concurrently
+      for (const app of apps) {
+        const appDir = join(testsDir, app);
+        const stats = await import('fs').then(fs => fs.promises.stat(appDir));
+        if (stats.isDirectory()) {
+          await processApplication(appDir, model, evaluationPrompt, evalPromptFile, filter);
+        }
       }
     }
   }
@@ -513,6 +541,11 @@ async function generateTestPage(
         </div>
         
         <div class="detail-row">
+          <div class="detail-label">Prompt:</div>
+          <div class="detail-value">${evaluation.eval_prompt || 'default.txt'}</div>
+        </div>
+        
+        <div class="detail-row">
           <div class="detail-label">Assessment:</div>
           <div class="detail-value">${evaluation.actual_result}</div>
         </div>
@@ -551,7 +584,7 @@ async function generateTestPage(
 }
 
 // Fix a test file by rewriting the code if model assessment differs from expected
-async function fixTestFile(model: string, testFileName: string): Promise<void> {
+async function fixTestFile(model: string, testFileName: string, evalPromptFile: string = 'default.txt'): Promise<void> {
   console.log(`Using model: ${model}`);
   
   let testFilePath: string | null = null;
@@ -615,27 +648,41 @@ async function fixTestFile(model: string, testFileName: string): Promise<void> {
   }
   
   // Load evaluation prompt
-  const evaluationPromptPath = join(PROJECT_ROOT, 'evaluation-prompt.txt');
-  const evaluationPrompt = await readFile(evaluationPromptPath, 'utf-8');
+  let evaluationPrompt: string;
+  if (evalPromptFile === 'evaluation-prompt.txt') {
+    // Legacy location
+    const evaluationPromptPath = join(PROJECT_ROOT, evalPromptFile);
+    evaluationPrompt = await readFile(evaluationPromptPath, 'utf-8');
+  } else {
+    const evaluationPromptPath = join(PROJECT_ROOT, 'eval-prompts', evalPromptFile);
+    try {
+      evaluationPrompt = await readFile(evaluationPromptPath, 'utf-8');
+    } catch (error) {
+      // Fallback to default if specific prompt not found
+      console.log(`Prompt ${evalPromptFile} not found, using default.txt`);
+      const defaultPath = join(PROJECT_ROOT, 'eval-prompts', 'default.txt');
+      evaluationPrompt = await readFile(defaultPath, 'utf-8');
+    }
+  }
   
   // Get previous evaluations from database for context before deleting
   const previousEvals = db.prepare(`
-    SELECT DISTINCT model_name, actual_result, explanation 
+    SELECT DISTINCT model_name, actual_result, explanation, eval_prompt 
     FROM evaluations 
-    WHERE test_file = ? 
+    WHERE test_file = ? AND eval_prompt = ?
     ORDER BY timestamp DESC
     LIMIT 10
-  `).all(testFilePath) as Array<{model_name: string; actual_result: string; explanation: string}>;
+  `).all(testFilePath, evalPromptFile) as Array<{model_name: string; actual_result: string; explanation: string; eval_prompt: string}>;
   
   if (previousEvals && previousEvals.length > 0) {
     console.log(`Found ${previousEvals.length} previous evaluations for context`);
   }
   
-  // Delete all existing results for this file from the database
+  // Delete all existing results for this file and prompt from the database
   const deleteResult = db.prepare(`
     DELETE FROM evaluations 
-    WHERE test_file = ?
-  `).run(testFilePath);
+    WHERE test_file = ? AND eval_prompt = ?
+  `).run(testFilePath, evalPromptFile);
   
   console.log(`Deleted ${deleteResult.changes} existing evaluation(s) for this file from the database`);
   
@@ -758,10 +805,10 @@ Provide ONLY the corrected SQL code with the comment. Do not include any markdow
 }
 
 // Autofix multiple test files based on correctness threshold
-async function autofixTestFiles(threshold: number, model: string): Promise<void> {
+async function autofixTestFiles(threshold: number, model: string, evalPromptFile: string = 'default.txt'): Promise<void> {
   console.log(`Finding test files with ≤${threshold}% correctness...`);
   
-  // Query database for files below threshold
+  // Query database for files below threshold for specific prompt
   const query = db.prepare(`
     SELECT 
       test_file,
@@ -769,12 +816,13 @@ async function autofixTestFiles(threshold: number, model: string): Promise<void>
       SUM(CASE WHEN expected_result = actual_result THEN 1 ELSE 0 END) as correct,
       CAST(SUM(CASE WHEN expected_result = actual_result THEN 1 ELSE 0 END) AS FLOAT) * 100.0 / COUNT(*) as percentage
     FROM evaluations
+    WHERE eval_prompt = ?
     GROUP BY test_file
     HAVING percentage <= ?
     ORDER BY percentage ASC, test_file
   `);
   
-  const lowPerformingFiles = query.all(threshold) as Array<{
+  const lowPerformingFiles = query.all(evalPromptFile, threshold) as Array<{
     test_file: string;
     total_evals: number;
     correct: number;
@@ -833,7 +881,7 @@ async function autofixTestFiles(threshold: number, model: string): Promise<void>
     
     try {
       // Extract just the filename for fixTestFile
-      await fixTestFile(model, defined(fileName));
+      await fixTestFile(model, defined(fileName), evalPromptFile);
       successCount++;
       console.log('');
     } catch (error) {
@@ -863,21 +911,43 @@ async function generateReport(): Promise<void> {
   // Query all results
   const allResults = db.prepare(`
     SELECT * FROM evaluations
-    ORDER BY test_file, model_name, timestamp DESC
+    ORDER BY test_file, model_name, eval_prompt, timestamp DESC
   `).all();
   
-  // Group by model, test file, and application
+  // Group by model, prompt, test file, and application
   const byModel: Record<string, any[]> = {};
+  const byPrompt: Record<string, any[]> = {};
+  const byModelAndPrompt: Record<string, Record<string, any[]>> = {};
   const byTestFile: Record<string, any[]> = {};
   const byApp: Record<string, any[]> = {};
   const testFilePages: Record<string, string> = {}; // Maps test file path to HTML filename
   
   for (const result of allResults as any[]) {
+    const prompt = result.eval_prompt || 'default.txt';
+    
     // Group by model
     if (!byModel[result.model_name]) {
       byModel[result.model_name] = [];
     }
     defined(byModel[result.model_name]).push(result);
+    
+    // Group by prompt
+    if (!byPrompt[prompt]) {
+      byPrompt[prompt] = [];
+    }
+    defined(byPrompt[prompt]).push(result);
+    
+    // Group by model AND prompt
+    if (!byModelAndPrompt[result.model_name]) {
+      byModelAndPrompt[result.model_name] = {};
+    }
+    if (!defined(byModelAndPrompt[result.model_name])[prompt]) {
+      defined(byModelAndPrompt[result.model_name])[prompt] = [];
+    }
+    const modelPromptArray = defined(byModelAndPrompt[result.model_name])[prompt];
+    if (modelPromptArray) {
+      modelPromptArray.push(result);
+    }
     
     // Group by test file
     if (!byTestFile[result.test_file]) {
@@ -911,7 +981,7 @@ async function generateReport(): Promise<void> {
     testFilePages[testFile] = htmlFileName;
   }
   
-  // Calculate statistics
+  // Calculate statistics for models, prompts, and combinations
   const modelStats: Record<string, { total: number; correct: number; percentage: number }> = {};
   for (const [model, results] of Object.entries(byModel)) {
     const correct = results.filter(r => r.expected_result === r.actual_result).length;
@@ -920,6 +990,29 @@ async function generateReport(): Promise<void> {
       correct,
       percentage: results.length > 0 ? (correct / results.length) * 100 : 0
     };
+  }
+  
+  const promptStats: Record<string, { total: number; correct: number; percentage: number }> = {};
+  for (const [prompt, results] of Object.entries(byPrompt)) {
+    const correct = results.filter(r => r.expected_result === r.actual_result).length;
+    promptStats[prompt] = {
+      total: results.length,
+      correct,
+      percentage: results.length > 0 ? (correct / results.length) * 100 : 0
+    };
+  }
+  
+  const modelPromptStats: Record<string, Record<string, { total: number; correct: number; percentage: number }>> = {};
+  for (const [model, prompts] of Object.entries(byModelAndPrompt)) {
+    modelPromptStats[model] = {};
+    for (const [prompt, results] of Object.entries(prompts)) {
+      const correct = results.filter(r => r.expected_result === r.actual_result).length;
+      modelPromptStats[model][prompt] = {
+        total: results.length,
+        correct,
+        percentage: results.length > 0 ? (correct / results.length) * 100 : 0
+      };
+    }
   }
   
   // Generate main index HTML
@@ -960,6 +1053,11 @@ async function generateReport(): Promise<void> {
     summary { cursor: pointer; padding: 10px; background: #e8e8e8; border-radius: 5px; font-weight: 600; }
     summary:hover { background: #d8d8d8; }
     .app-section { margin: 20px 0; padding: 20px; background: white; border-radius: 8px; border: 1px solid #ddd; }
+    .prompt-badge { display: inline-block; padding: 3px 8px; background: #e3f2fd; color: #1976d2; border-radius: 4px; font-size: 12px; margin-left: 8px; }
+    .combination-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 15px; margin: 20px 0; }
+    .combination-card { background: white; border: 1px solid #ddd; border-radius: 8px; padding: 15px; }
+    .combination-card h4 { margin: 0 0 10px 0; font-size: 16px; color: #444; }
+    .combination-score { font-size: 24px; font-weight: bold; margin: 10px 0; }
   </style>
 </head>
 <body>
@@ -971,10 +1069,14 @@ async function generateReport(): Promise<void> {
       <p><strong>Total Evaluations:</strong> ${allResults.length}</p>
       <p><strong>Unique Test Files:</strong> ${Object.keys(byTestFile).length}</p>
       <p><strong>Models Tested:</strong> ${Object.keys(byModel).length}</p>
+      <p><strong>Evaluation Prompts:</strong> ${(() => {
+        const uniquePrompts = new Set((allResults as any[]).map(r => r.eval_prompt || 'default.txt'));
+        return `${uniquePrompts.size} (${Array.from(uniquePrompts).join(', ')})`;
+      })()}</p>
     </div>
     
     <div class="stats">
-      <h2>Overall Statistics</h2>
+      <h2>Overall Statistics by Model</h2>
       <div class="stat-grid">`;
   
   for (const [model, stats] of Object.entries(modelStats)) {
@@ -988,10 +1090,48 @@ async function generateReport(): Promise<void> {
   
   html += `
       </div>
+    </div>
+    
+    <div class="stats">
+      <h2>Overall Statistics by Prompt</h2>
+      <div class="stat-grid">`;
+  
+  for (const [prompt, stats] of Object.entries(promptStats)) {
+    html += `
+        <div class="stat-card">
+          <h3>${prompt}</h3>
+          <div class="stat-value">${stats.percentage.toFixed(1)}%</div>
+          <div class="stat-detail">Correct: ${stats.correct} / ${stats.total}</div>
+        </div>`;
+  }
+  
+  html += `
+      </div>
     </div>`;
   
+  // Results by Model/Prompt Combination
+  html += `<h2>Results by Model and Prompt Combination</h2>`;
+  html += `<div class="combination-grid">`;
+  
+  for (const [model, prompts] of Object.entries(byModelAndPrompt)) {
+    for (const [prompt] of Object.entries(prompts)) {
+      const stats = defined(modelPromptStats[model])[prompt];
+      if (!stats) continue;
+      html += `
+        <div class="combination-card">
+          <h4>${model}<span class="prompt-badge">${prompt}</span></h4>
+          <div class="combination-score" style="color: ${stats.percentage >= 70 ? '#28a745' : stats.percentage >= 50 ? '#ffc107' : '#dc3545'}">
+            ${stats.percentage.toFixed(1)}%
+          </div>
+          <div class="stat-detail">Correct: ${stats.correct} / ${stats.total}</div>
+        </div>`;
+    }
+  }
+  
+  html += `</div>`;
+  
   // Results by model with links to test pages
-  html += `<h2>Results by Model</h2>`;
+  html += `<h2>Detailed Results by Model</h2>`;
   for (const [model, results] of Object.entries(byModel)) {
     const stats = modelStats[model];
     // Get unique test files for this model
@@ -1007,6 +1147,7 @@ async function generateReport(): Promise<void> {
         <thead>
           <tr>
             <th>Test File</th>
+            <th>Prompt</th>
             <th>Expected</th>
             <th>Actual</th>
             <th>Result</th>
@@ -1015,23 +1156,26 @@ async function generateReport(): Promise<void> {
         </thead>
         <tbody>`;
     
-    // Show unique test files only (latest evaluation per file)
+    // Show all evaluations with prompts
     for (const testFile of uniqueTestFiles) {
-      const result = results.find(r => r.test_file === testFile);
-      if (!result) continue;
-      
-      const correct = result.expected_result === result.actual_result;
-      const fileName = result.test_file.split('/').pop();
-      const testPageLink = testFilePages[result.test_file] || '#';
-      
-      html += `
+      // Get all evaluations for this test file and model
+      const fileModelResults = results.filter(r => r.test_file === testFile);
+      for (const result of fileModelResults) {
+        const correct = result.expected_result === result.actual_result;
+        const fileName = result.test_file.split('/').pop();
+        const testPageLink = testFilePages[result.test_file] || '#';
+        const prompt = result.eval_prompt || 'default.txt';
+        
+        html += `
           <tr>
             <td><a href="${testPageLink}" class="test-link">${fileName}</a></td>
+            <td><span class="prompt-badge">${prompt}</span></td>
             <td class="${result.expected_result}">${result.expected_result}</td>
             <td class="${result.actual_result}">${result.actual_result}</td>
             <td class="${correct ? 'correct' : 'incorrect'}">${correct ? '✓' : '✗'}</td>
             <td><a href="${testPageLink}" class="test-link">View →</a></td>
           </tr>`;
+      }
     }
     
     html += `
@@ -1152,7 +1296,14 @@ async function main() {
       model = defined(args[modelIndex + 1]);
     }
     
-    await autofixTestFiles(threshold, model);
+    // Check for optional prompt
+    let evalPrompt = 'default.txt';  // Default prompt
+    const promptIndex = args.indexOf('--prompt');
+    if (promptIndex !== -1 && promptIndex < args.length - 1) {
+      evalPrompt = defined(args[promptIndex + 1]);
+    }
+    
+    await autofixTestFiles(threshold, model, evalPrompt);
   } else if (args.includes('--fix')) {
     // Fix command - get positional argument for test file
     const fixIndex = args.indexOf('--fix');
@@ -1180,7 +1331,14 @@ async function main() {
       model = defined(args[modelIndex + 1]);
     }
     
-    await fixTestFile(model, testFile);
+    // Check for optional prompt
+    let evalPrompt = 'default.txt';  // Default prompt
+    const promptIndex = args.indexOf('--prompt');
+    if (promptIndex !== -1 && promptIndex < args.length - 1) {
+      evalPrompt = defined(args[promptIndex + 1]);
+    }
+    
+    await fixTestFile(model, testFile, evalPrompt);
   } else if (args.includes('--model')) {
     // Collect all model specifications
     const models: string[] = [];
@@ -1208,17 +1366,17 @@ async function main() {
     console.error('Usage:');
     console.error('  npm run evaluate -- --model <model_name> [--model <model2>] [--filter <pattern>]  # Run evaluation');
     console.error('  npm run report                                                                     # Generate report');
-    console.error('  npm run fix <filename> [-- --model <model_name>]                                  # Fix a test file');
-    console.error('  npm run autofix -- <percentage> [--model <model_name>]                            # Fix all files ≤ percentage');
+    console.error('  npm run fix <filename> [-- --model <model_name>] [--prompt <prompt_file>]         # Fix a test file');
+    console.error('  npm run autofix -- <percentage> [--model <model_name>] [--prompt <prompt_file>]   # Fix all files ≤ percentage');
     console.error('  npm run verify                                                                     # Verify query behavior');
     console.error('\nExamples:');
     console.error('  npm run evaluate -- --model gpt-4o-mini --filter approve-po                       # Single model with filter');
     console.error('  npm run evaluate -- --model gpt-4o --model claude-3-opus --model gemini-pro       # Multiple models');
     console.error('  npm run evaluate -- --model gpt-4o --model claude-sonnet --filter 01-good         # Multiple models with filter');
-    console.error('  npm run fix approve-po-01-good.md                                  # Fix using default model (claude-opus-4.1)');
-    console.error('  npm run fix approve-po-01-good.md -- --model gpt-4o               # Fix using specific model');
+    console.error('  npm run fix approve-po-01-good.md                                  # Fix using default model and prompt');
+    console.error('  npm run fix approve-po-01-good.md -- --model gpt-4o --prompt cot.txt             # Fix with specific model and prompt');
     console.error('  npm run autofix -- 50                                              # Fix all files with ≤50% correctness');
-    console.error('  npm run autofix -- 0 --model gpt-4o                               # Fix 0% correct files with specific model');
+    console.error('  npm run autofix -- 0 --model gpt-4o --prompt cot.txt              # Fix 0% correct files with specific prompt');
     process.exit(1);
   }
 }

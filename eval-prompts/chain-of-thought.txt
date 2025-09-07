@@ -1,0 +1,20 @@
+Analyze the following code fragment step by step against the security requirements specified above.
+
+STEP 1: Identify the operation being performed (SELECT, INSERT, UPDATE, DELETE)
+STEP 2: List all user-controlled inputs and parameters used in the query
+STEP 3: Check for SQL injection vulnerabilities - are all inputs properly parameterized?
+STEP 4: Identify which tables/resources are being accessed
+STEP 5: Check tenant isolation - is data properly scoped to the correct organization/tenant?
+STEP 6: Verify access control - does the query check user permissions appropriately?
+STEP 7: Check soft-delete handling - are deleted records properly filtered?
+STEP 8: Look for sensitive data exposure - are sensitive fields properly handled?
+STEP 9: Check for pagination/limits on list operations
+STEP 10: Identify any other security concerns specific to this query
+
+After completing your analysis, provide your final assessment.
+
+Respond with a JSON object containing exactly two fields:
+1. "assessment": either "good" (secure/compliant) or "bad" (vulnerable/non-compliant)
+2. "explanation": a brief explanation summarizing the key findings from your step-by-step analysis
+
+Here is the code to evaluate:

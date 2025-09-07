@@ -1,0 +1,7 @@
+Review this SQL query for security vulnerabilities. Focus on: SQL injection, access control, data leakage, tenant isolation.
+
+Respond with JSON:
+- "assessment": "good" or "bad"
+- "explanation": brief reason (1-2 sentences)
+
+Code:

@@ -37,9 +37,41 @@ This benchmark suite evaluates how well LLMs can detect security vulnerabilities
 
 ## Running Evaluations
 
+### Evaluation Prompts
+
+The system supports multiple evaluation prompts to test different prompting strategies. Prompts are stored in the `eval-prompts/` directory:
+
+- `default.txt` - Standard evaluation prompt
+- `chain-of-thought.txt` - Step-by-step analysis prompt
+- `concise.txt` - Minimal prompt for quick evaluation
+
+When you run evaluations, the system automatically iterates through ALL prompts in the `eval-prompts/` directory. Each model × prompt combination is evaluated and tracked separately.
+
+### Creating Custom Evaluation Prompts
+
+To add your own evaluation prompts:
+
+1. Create a new `.txt` file in the `eval-prompts/` directory
+2. Write your prompt that will be sent after the schema/requirements
+3. End with "Here is the code to evaluate:" or similar
+4. The prompt must request JSON output with `assessment` and `explanation` fields
+
+Example custom prompt (`eval-prompts/security-focused.txt`):
+```
+Focus specifically on authentication and authorization vulnerabilities.
+Check if the query properly validates user identity and permissions.
+Look for any way an attacker could bypass access controls.
+
+Respond with a JSON object:
+- "assessment": "good" if secure, "bad" if vulnerable
+- "explanation": describe any authorization issues found
+
+Here is the code to evaluate:
+```
+
 ### Evaluate a Model
 
-Run the full benchmark suite against a specific model:
+Run the full benchmark suite against a specific model (uses all prompts automatically):
 
 ```bash
 npm run evaluate -- --model gpt-4o-mini
@@ -77,29 +109,37 @@ npm run report
 
 Reports are saved in the `reports/` directory with timestamps. Each report includes:
 - Summary statistics showing overall accuracy percentages
+- Number of evaluation prompts used and their names
 - Results grouped by model with individual test file links
 - Results grouped by application showing performance across all models
-- Detailed pages for each test file showing all evaluations
+- Detailed pages for each test file showing all evaluations with their prompts
+- Each evaluation shows which prompt was used
 
 ### Fix Test Files
 
 The fix command can automatically rewrite test code when a model's assessment differs from the expected result:
 
 ```bash
-# Fix using default model (anthropic/claude-opus-4.1)
+# Fix using default model (anthropic/claude-opus-4.1) and default prompt
 npm run fix approve-po-01-good.md
 
 # Fix using a specific model
 npm run fix approve-po-01-good.md -- --model gpt-4o
+
+# Fix using a specific prompt
+npm run fix approve-po-01-good.md -- --prompt chain-of-thought.txt
+
+# Fix using both specific model and prompt
+npm run fix approve-po-01-good.md -- --model gpt-4o --prompt concise.txt
 
 # Fix using full or relative path
 npm run fix tests/purchase-order/approve-po-01-good.md
 ```
 
 How it works:
-1. Retrieves any previous evaluation results for context
-2. **Deletes all existing database entries for that test file**
-3. Evaluates the test file with the specified model
+1. Retrieves any previous evaluation results for context (filtered by prompt)
+2. **Deletes all existing database entries for that test file and prompt combination**
+3. Evaluates the test file with the specified model and prompt
 4. If the assessment matches expected: reports no fix needed
 5. If the assessment differs: asks the model to rewrite the code to match expectations
 6. Updates the test file with corrected code
@@ -135,7 +175,7 @@ This command:
 The autofix command finds and fixes multiple test files based on their correctness percentage:
 
 ```bash
-# Fix all files with ≤50% correctness using default model
+# Fix all files with ≤50% correctness using default model and prompt
 npm run autofix -- 50
 
 # Fix all files with 0% correctness (completely failing)
@@ -143,15 +183,21 @@ npm run autofix -- 0
 
 # Use a specific model for autofix
 npm run autofix -- 30 --model gpt-4o
+
+# Use a specific prompt for autofix
+npm run autofix -- 50 --prompt chain-of-thought.txt
+
+# Use both specific model and prompt
+npm run autofix -- 0 --model gpt-4o --prompt concise.txt
 ```
 
 How it works:
-1. Queries the database for all test files with correctness ≤ the specified percentage
+1. Queries the database for all test files with correctness ≤ the specified percentage (filtered by prompt if specified)
 2. Shows a summary of files to be fixed with their current accuracy
 3. For >10 files, prompts for confirmation (in interactive terminals only)
 4. Processes each file sequentially:
    - Shows progress indicator `[n/total]`
-   - Calls the fix logic (including DB cleanup)
+   - Calls the fix logic (including DB cleanup for that prompt)
    - Continues on error
 5. Displays final summary with success/failure counts
 
@@ -365,19 +411,23 @@ app.get('/api/user/:id', (req, res) => {
 ## How It Works
 
 1. **Test Discovery**: The evaluator scans the `tests/` directory for applications
-2. **Prompt Construction**: For each test, it sends three separate messages:
-   - The SPEC.md's Prompt section (schema and requirements)
-   - The evaluation prompt from `evaluation-prompt.txt`
-   - The code fragment from the test file
-3. **LLM Evaluation**: 
+2. **Prompt Loading**: The evaluator loads all `.txt` files from `eval-prompts/` directory
+3. **Evaluation Loop**: For each model and each prompt:
+   - Iterates through all test applications
+   - Sends three separate messages per test:
+     - The SPEC.md's Prompt section (schema and requirements)
+     - The evaluation prompt from the current prompt file
+     - The code fragment from the test file
+4. **LLM Evaluation**: 
    - Sends the combined prompt to the specified model via OpenRouter
    - Uses structured JSON output for consistent responses
    - Processes up to 5 concurrent API requests per application
-4. **Result Storage**: Stores the model's assessment and explanation in SQLite
-5. **Reporting**: Generates HTML reports with:
+5. **Result Storage**: Stores the model's assessment, explanation, and prompt filename in SQLite
+6. **Reporting**: Generates HTML reports with:
    - Overall statistics and accuracy percentages
+   - Evaluation prompt information
    - Results grouped by model and application
-   - Individual pages for each test file with full details
+   - Individual pages for each test file with full details including prompts used
 
 ## Database Schema
 
@@ -389,6 +439,7 @@ Results are stored in `results.db` with the following schema:
 | timestamp | DATETIME | When the evaluation was run |
 | test_file | TEXT | Full path to the test file |
 | model_name | TEXT | Name of the model used |
+| eval_prompt | TEXT | Prompt file used (e.g., 'default.txt', 'chain-of-thought.txt') |
 | expected_result | TEXT | Expected result ("good" or "bad") |
 | actual_result | TEXT | Model's assessment |
 | explanation | TEXT | Model's reasoning |
@@ -396,9 +447,10 @@ Results are stored in `results.db` with the following schema:
 | response | TEXT | Complete API response body (JSON) |
 
 Key features:
-- **Deduplication**: The evaluator checks for existing results before making API calls
+- **Deduplication**: The evaluator checks for existing results (by model, file, and prompt) before making API calls
 - **Full audit trail**: Request/response bodies are stored for debugging
-- **Cleanup on fix**: The fix and autofix commands delete all existing entries for a file before rewriting
+- **Cleanup on fix**: The fix and autofix commands delete entries for a specific file+prompt combination before rewriting
+- **Multi-prompt support**: Each evaluation tracks which prompt was used, allowing comparison of prompting strategies
 
 ## Troubleshooting
 
