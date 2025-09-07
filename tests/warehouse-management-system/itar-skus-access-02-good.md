@@ -5,45 +5,39 @@ Alternative compliant approach using column masking for non-controllers, showing
 # Code
 
 ```sql
--- Compliant version with tenant isolation, secure zone access control, active contract validation, ITAR masking, and pagination
-SELECT 
-  i.id,
-  i.sku_id,
-  i.qty_on_hand,
-  CASE 
-    WHEN s.itar_flag = true AND (u.is_us_person != true OR uf.role NOT IN ('supervisor', 'inventory_controller'))
-    THEN NULL
-    ELSE i.bin
-  END as bin,
-  CASE 
-    WHEN s.itar_flag = true AND (u.is_us_person != true OR uf.role NOT IN ('supervisor', 'inventory_controller'))
-    THEN NULL
-    ELSE i.lot_id
-  END as lot_id,
-  CASE 
-    WHEN s.itar_flag = true AND (u.is_us_person != true OR uf.role NOT IN ('supervisor', 'inventory_controller'))
-    THEN 'RESTRICTED'
-    ELSE s.name
-  END as sku_name,
-  s.code as sku_code
+-- Alternative compliant approach - direct filtering for ITAR access
+SELECT i.*, s.code as sku_code, s.name as sku_name
 FROM wms_inventory i
-JOIN wms_skus s ON s.id = i.sku_id AND s.is_deleted = false
-JOIN wms_user_facilities uf ON uf.user_id = :user_id AND uf.facility_id = i.facility_id
-JOIN users u ON u.id = :user_id
-JOIN wms_facilities f ON f.id = i.facility_id AND f.is_deleted = false
-JOIN wms_facility_clients fc ON fc.facility_id = i.facility_id 
-  AND fc.client_org_id = i.client_org_id
+INNER JOIN wms_skus s ON s.id = i.sku_id
+INNER JOIN wms_facilities f ON f.id = i.facility_id
+INNER JOIN wms_facility_clients fc ON fc.facility_id = i.facility_id AND fc.client_org_id = i.client_org_id
+WHERE i.facility_id = :facility_id
+  AND s.itar_flag = true
+  AND s.is_deleted = false
+  AND f.is_deleted = false
+  AND i.is_deleted = false
   AND fc.active = true
   AND (fc.valid_to IS NULL OR fc.valid_to >= CURRENT_DATE)
-WHERE i.facility_id = :facility_id
-  AND i.client_org_id = :org_id
-  AND i.is_deleted = false
-  AND (
-    f.is_secure_zone = false 
-    OR uf.role IN ('supervisor', 'inventory_controller')
+  -- User must be US person with proper role for ITAR
+  AND EXISTS (
+    SELECT 1 FROM wms_user_facilities uf
+    JOIN users u ON u.id = uf.user_id
+    WHERE uf.user_id = :user_id
+      AND uf.facility_id = i.facility_id
+      AND uf.role IN ('supervisor', 'inventory_controller')
+      AND u.is_us_person = true
   )
-  AND NOT (s.itar_flag = true AND (u.is_us_person = false OR uf.role NOT IN ('supervisor', 'inventory_controller')))
-ORDER BY i.id
+  -- Secure zone access if applicable
+  AND (
+    f.is_secure_zone = false
+    OR EXISTS (
+      SELECT 1 FROM wms_user_facilities uf2
+      WHERE uf2.user_id = :user_id
+        AND uf2.facility_id = i.facility_id
+        AND uf2.role IN ('supervisor', 'inventory_controller')
+    )
+  )
+ORDER BY i.bin, s.code
 LIMIT 1000;
 ```
 

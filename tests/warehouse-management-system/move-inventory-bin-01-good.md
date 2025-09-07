@@ -52,7 +52,7 @@ audit_before AS (
 updated AS (
   UPDATE wms_inventory
   SET bin = :new_bin,
-      updated_at = now()
+      updated_at = CURRENT_TIMESTAMP
   FROM access_check
   WHERE wms_inventory.id = access_check.id
   RETURNING wms_inventory.*
@@ -69,9 +69,7 @@ audit_insert AS (
   FROM updated u
   CROSS JOIN audit_before ab
 )
-SELECT id, sku_id, lot_id, facility_id, client_org_id, bin, qty_on_hand, 
-       qty_reserved, created_at, updated_at, is_deleted
-FROM updated;
+SELECT * FROM updated;
 ```
 
 # Expected

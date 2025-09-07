@@ -9,7 +9,7 @@ Alternative compliant approach with optimistic locking to prevent concurrent mod
 WITH validated_move AS (
   UPDATE wms_inventory i
   SET bin = :new_bin,
-      updated_at = now()
+      updated_at = CURRENT_TIMESTAMP
   FROM wms_skus s, wms_facilities f, users u, wms_user_facilities uf
   WHERE i.id = :inventory_id
     AND i.facility_id = :facility_id
@@ -47,9 +47,7 @@ audit_insert AS (
     to_jsonb(validated_move.*)
   FROM validated_move
 )
-SELECT id, sku_id, lot_id, facility_id, client_org_id, bin, qty_on_hand, 
-       qty_reserved, created_at, updated_at, is_deleted
-FROM validated_move;
+SELECT * FROM validated_move;
 ```
 
 # Expected
