@@ -276,14 +276,14 @@ export async function verifyQueries(filter?: string) {
             goodResults.get(key)!.push(resultToStore);
             
             if (modifiesData && verifyQuery) {
-              console.log(`    ✓ Parameter set ${i + 1}: ${resultToStore.length} rows (verified)`);
+              console.log(`    ✅ Parameter set ${i + 1}: ${resultToStore.length} rows (verified)`);
             } else if (modifiesData) {
-              console.log(`    ✓ Parameter set ${i + 1}: ${result.affectedRows || 0} rows affected`);
+              console.log(`    ✅ Parameter set ${i + 1}: ${result.affectedRows || 0} rows affected`);
             } else {
-              console.log(`    ✓ Parameter set ${i + 1}: ${result.rows.length} rows`);
+              console.log(`    ✅ Parameter set ${i + 1}: ${result.rows.length} rows`);
             }
           } catch (e: any) {
-            console.log(`    ✗ Parameter set ${i + 1}: ERROR - ${e.message}`);
+            console.log(`    ⛔ Parameter set ${i + 1}: ERROR - ${e.message}`);
             goodQueryErrors = true;
             hasErrors = true;
             errorCount++;
@@ -300,7 +300,7 @@ export async function verifyQueries(filter?: string) {
       
       // If any good query had errors, that's a failure
       if (goodQueryErrors) {
-        console.log(`\n  ✗ ERROR: Good queries failed to execute properly`);
+        console.log(`\n  ⛔ ERROR: Good queries failed to execute properly`);
       }
       
       // Check that all good queries produce the same results for each parameter set
@@ -310,7 +310,7 @@ export async function verifyQueries(filter?: string) {
           const firstResult = results[0];
           for (let i = 1; i < results.length; i++) {
             if (!isEqual(results[i], firstResult)) {
-              console.log(`\n  ✗ MISMATCH: Good queries produce different results for ${paramKey}`);
+              console.log(`\n  ⛔ MISMATCH: Good queries produce different results for ${paramKey}`);
               allGoodMatch = false;
               hasErrors = true;
               errorCount++;
@@ -339,7 +339,7 @@ export async function verifyQueries(filter?: string) {
       }
       
       if (!hasAnyData && !goodQueryErrors) {
-        console.log(`\n  ✗ WARNING: Good queries return no data for any parameter set`);
+        console.log(`\n  ⛔ WARNING: Good queries return no data for any parameter set`);
         hasErrors = true;
         errorCount++;
       }
@@ -391,19 +391,19 @@ export async function verifyQueries(filter?: string) {
               // Check if the good query had an error
               if (expectedGoodResult && expectedGoodResult.__error__) {
                 // Good query errored, bad query succeeded - that's a difference
-                console.log(`    ✓ Parameter set ${i + 1}: DIFFERS from good (good query errored, bad succeeded)`);
+                console.log(`    ✅ Parameter set ${i + 1}: DIFFERS from good (good query errored, bad succeeded)`);
                 foundDifference = true;
               } else if (!isEqual(resultToCompare, expectedGoodResult)) {
                 if (modifiesData && verifyQuery) {
-                  console.log(`    ✓ Parameter set ${i + 1}: DIFFERS from good (verified data)`);
+                  console.log(`    ✅ Parameter set ${i + 1}: DIFFERS from good (verified data)`);
                 } else if (modifiesData) {
-                  console.log(`    ✓ Parameter set ${i + 1}: DIFFERS from good (${result.affectedRows || 0} rows affected vs expected)`);
+                  console.log(`    ✅ Parameter set ${i + 1}: DIFFERS from good (${result.affectedRows || 0} rows affected vs expected)`);
                 } else {
-                  console.log(`    ✓ Parameter set ${i + 1}: DIFFERS from good (${result.rows.length} rows vs expected)`);
+                  console.log(`    ✅ Parameter set ${i + 1}: DIFFERS from good (${result.rows.length} rows vs expected)`);
                 }
                 foundDifference = true;
               } else {
-                console.log(`    ✗ Parameter set ${i + 1}: SAME as good query (vulnerability not exposed)`);
+                console.log(`    ? Parameter set ${i + 1}: SAME as good query (vulnerability not exposed)`);
               }
             }
           } catch (e: any) {
@@ -427,11 +427,11 @@ export async function verifyQueries(filter?: string) {
                                              e.message.includes('not-null');
                 
                 if (isConstraintViolation) {
-                  console.log(`    ✓ Parameter set ${i + 1}: CONSTRAINT VIOLATION (acceptable for bad query) - ${e.message}`);
+                  console.log(`    ✅ Parameter set ${i + 1}: CONSTRAINT VIOLATION (acceptable for bad query) - ${e.message}`);
                   foundDifference = true;  // Constraint violation counts as different behavior
                 } else {
                   // Other errors are still failures
-                  console.log(`    ✗ Parameter set ${i + 1}: BAD QUERY ERROR - ${e.message}`);
+                  console.log(`    ⛔ Parameter set ${i + 1}: BAD QUERY ERROR - ${e.message}`);
                   foundDifference = false;  // Non-constraint error in bad query means test failed
                   hasErrors = true;
                   errorCount++;
@@ -445,7 +445,7 @@ export async function verifyQueries(filter?: string) {
         }
         
         if (!foundDifference) {
-          console.log(`  ✗ WARNING: ${badQuery.file} produces same results as good queries for all parameters`);
+          console.log(`  ⛔ WARNING: ${badQuery.file} produces same results as good queries for all parameters`);
           hasErrors = true;
           errorCount++;
         }
@@ -457,7 +457,7 @@ export async function verifyQueries(filter?: string) {
   }
   
   if (hasErrors) {
-    console.log(`\n❌ Verification failed with ${errorCount} error(s)\n`);
+    console.log(`\n⛔ Verification failed with ${errorCount} error(s)\n`);
     process.exit(1);
   } else {
     console.log('\n✅ Verification complete\n');
