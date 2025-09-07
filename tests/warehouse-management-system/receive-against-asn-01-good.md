@@ -12,7 +12,6 @@ WITH validated_asn AS (
   JOIN wms_facilities f ON f.id = a.facility_id AND f.is_deleted = false
   WHERE a.id = :asn_id
     AND a.facility_id = :facility_id
-    AND a.client_org_id = :org_id
     AND a.status IN ('AT_GATE', 'IN_TRANSIT')
     AND a.is_deleted = false
     AND EXISTS (
@@ -21,24 +20,22 @@ WITH validated_asn AS (
         AND uf.facility_id = a.facility_id
         AND uf.role IN ('inventory_controller', 'supervisor')
     )
-    AND (
-      -- Client user OR 3PL operator with active contract
-      :org_id = a.client_org_id
-      OR EXISTS (
-        SELECT 1 FROM wms_facility_clients fc
-        WHERE fc.facility_id = a.facility_id
-          AND fc.client_org_id = a.client_org_id
-          AND fc.active = true
-          AND (fc.valid_to IS NULL OR fc.valid_to >= CURRENT_DATE)
-      )
+    AND EXISTS (
+      SELECT 1 FROM wms_facility_clients fc
+      WHERE fc.facility_id = a.facility_id
+        AND fc.client_org_id = a.client_org_id
+        AND fc.active = true
+        AND (fc.valid_to IS NULL OR fc.valid_to >= CURRENT_DATE)
     )
 ), validated_sku AS (
   SELECT s.id, s.itar_flag 
   FROM wms_skus s 
   JOIN users u ON u.id = :user_id
   WHERE s.id = :sku_id 
-    AND s.org_id = :org_id 
     AND s.is_deleted = false
+    AND EXISTS (
+      SELECT 1 FROM validated_asn v WHERE s.org_id = v.client_org_id
+    )
     AND (s.itar_flag = false OR u.is_us_person = true)
 ), validated_lot AS (
   SELECT l.id 
@@ -47,8 +44,8 @@ WITH validated_asn AS (
     AND l.sku_id = :sku_id
     AND l.is_deleted = false
 ), receipt_insert AS (
-  INSERT INTO wms_receipts (asn_id, sku_id, lot_id, qty_received, receiver_id)
-  SELECT v.id, s.id, l.id, :qty_received, :user_id
+  INSERT INTO wms_receipts (id, asn_id, sku_id, lot_id, qty_received, receiver_id)
+  SELECT 'rec-' || substr(md5(random()::text), 1, 8), v.id, s.id, l.id, :qty_received, :user_id
   FROM validated_asn v, validated_sku s
   LEFT JOIN validated_lot l ON true
   RETURNING *
