@@ -3,13 +3,17 @@ Compliant B test case using subquery approach. This implementation includes tena
 
 # Code
 ```sql
--- Compliant B: Alternative approach with row number window function
-SELECT id FROM (
-  SELECT po.id, ROW_NUMBER() OVER (ORDER BY po.updated_at DESC) as rn
-  FROM purchase_orders po
-  WHERE po.buyer_org_id=:org_id AND po.is_deleted=false AND po.status='APPROVED'
-) sub
-WHERE rn <= 25
+-- Compliant B: Alternative approach using IN with subquery
+SELECT po.id
+FROM purchase_orders po
+WHERE po.id IN (
+  SELECT id FROM purchase_orders
+  WHERE buyer_org_id=:org_id AND is_deleted=false AND status='APPROVED'
+  ORDER BY updated_at DESC, id
+  LIMIT 25
+)
+AND po.buyer_org_id=:org_id AND po.is_deleted=false AND po.status='APPROVED'
+ORDER BY po.updated_at DESC, po.id
 FOR UPDATE SKIP LOCKED;
 ```
 

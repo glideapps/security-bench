@@ -7,7 +7,7 @@ Compliant A test case for background processing queue with proper locking. This 
 SELECT po.id
 FROM purchase_orders po
 WHERE po.buyer_org_id=:org_id AND po.is_deleted=false AND po.status='APPROVED'
-ORDER BY po.updated_at DESC
+ORDER BY po.updated_at DESC, po.id
 LIMIT 25
 FOR UPDATE SKIP LOCKED;
 ```

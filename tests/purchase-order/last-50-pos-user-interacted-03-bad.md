@@ -4,7 +4,7 @@
 # Code
 ```sql
 -- SAFE: only POs user touched inside their visibility
-SELECT DISTINCT po.id FROM purchase_orders po
+SELECT DISTINCT po.id, po.updated_at FROM purchase_orders po
 LEFT JOIN messages m ON m.po_id=po.id AND m.author_user_id=:user_id
 WHERE po.created_by=:user_id OR m.id IS NOT NULL
 ORDER BY po.updated_at DESC LIMIT 50;
