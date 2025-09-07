@@ -324,7 +324,8 @@ export async function verifyQueries(filter?: string) {
         console.log(`\n  ✓ All good queries produce identical results`);
       }
       
-      // Check that at least one good query returns data for at least one parameter set
+      // Check that at least one parameter set returns data for good queries
+      // (It's OK for some parameter sets to return 0 rows, but at least one should return data)
       let hasAnyData = false;
       for (const [, results] of goodResults) {
         if (results.length > 0 && results[0] && !results[0].__error__) {
@@ -339,7 +340,7 @@ export async function verifyQueries(filter?: string) {
       }
       
       if (!hasAnyData && !goodQueryErrors) {
-        console.log(`\n  ⛔ WARNING: Good queries return no data for any parameter set`);
+        console.log(`\n  ⛔ WARNING: Good queries return no data for ANY parameter set (at least one should return data)`);
         hasErrors = true;
         errorCount++;
       }
