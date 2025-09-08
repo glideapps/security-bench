@@ -88,7 +88,7 @@ async function callOpenRouter(
   evaluationPrompt: string, 
   code: string,
   previousEvaluations?: Array<{model_name: string; actual_result: string; explanation: string}>
-): Promise<{ assessment: string; explanation: string; request: any; response: any } | null> {
+): Promise<{ explanation: string; assessment: string; request: any; response: any } | null> {
   const apiKey = process.env['OPENROUTER_API_KEY'];
   if (!apiKey) {
     console.error('OPENROUTER_API_KEY not found in environment variables');
@@ -149,17 +149,17 @@ async function callOpenRouter(
             schema: {
               type: 'object',
               properties: {
+                explanation: {
+                  type: 'string',
+                  description: 'Explanation of the security assessment'
+                },
                 assessment: {
                   type: 'string',
                   enum: ['good', 'bad'],
                   description: 'Whether the code is secure (good) or vulnerable (bad)'
-                },
-                explanation: {
-                  type: 'string',
-                  description: 'Explanation of the security assessment'
                 }
               },
-              required: ['assessment', 'explanation'],
+              required: ['explanation', 'assessment'],
               additionalProperties: false
             }
           }
@@ -237,13 +237,18 @@ async function callOpenRouter(
         }
         
         const result = JSON.parse(jsonContent);
-        if (!result.assessment || !result.explanation) {
+        if (!result.explanation || !result.assessment) {
           console.error('Invalid response structure from model');
           return null;
         }
+        // Ensure explanation is a string (some models might return structured data)
+        const explanation = typeof result.explanation === 'string' 
+          ? result.explanation 
+          : JSON.stringify(result.explanation);
+        
         return {
+          explanation: explanation,
           assessment: result.assessment.toLowerCase(),
-          explanation: result.explanation,
           request: requestBody,
           response: responseData
         };
@@ -269,20 +274,29 @@ async function processTestFile(
   specPrompt: string, 
   evaluationPrompt: string,
   model: string,
-  evalPromptFile: string
+  evalPromptFile: string,
+  force: boolean = false
 ): Promise<void> {
-  // Check if this evaluation already exists
-  const existingEval = db.prepare(`
-    SELECT id, actual_result, expected_result 
-    FROM evaluations 
-    WHERE test_file = ? AND model_name = ? AND eval_prompt = ?
-  `).get(testFilePath, model, evalPromptFile) as { id: number; actual_result: string; expected_result: string } | undefined;
-  
-  if (existingEval) {
-    const success = existingEval.actual_result === existingEval.expected_result;
-    console.log(`Skipping ${basename(testFilePath)} (already evaluated)`);
-    console.log(`  ${success ? '✓' : '✗'} Expected: ${existingEval.expected_result}, Got: ${existingEval.actual_result}`);
-    return;
+  // Check if this evaluation already exists (unless force flag is set)
+  if (!force) {
+    const existingEval = db.prepare(`
+      SELECT id, actual_result, expected_result 
+      FROM evaluations 
+      WHERE test_file = ? AND model_name = ? AND eval_prompt = ?
+    `).get(testFilePath, model, evalPromptFile) as { id: number; actual_result: string; expected_result: string } | undefined;
+    
+    if (existingEval) {
+      const success = existingEval.actual_result === existingEval.expected_result;
+      console.log(`Skipping ${basename(testFilePath)} (already evaluated)`);
+      console.log(`  ${success ? '✓' : '✗'} Expected: ${existingEval.expected_result}, Got: ${existingEval.actual_result}`);
+      return;
+    }
+  } else {
+    // If force flag is set, delete existing evaluation first
+    db.prepare(`
+      DELETE FROM evaluations 
+      WHERE test_file = ? AND model_name = ? AND eval_prompt = ?
+    `).run(testFilePath, model, evalPromptFile);
   }
   
   const testData = await parseTestFile(testFilePath);
@@ -305,7 +319,7 @@ async function processTestFile(
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `);
   
-  stmt.run(
+  const params = [
     testFilePath, 
     model, 
     evalPromptFile,
@@ -314,14 +328,33 @@ async function processTestFile(
     result.explanation,
     JSON.stringify(result.request),
     JSON.stringify(result.response)
-  );
+  ];
+  
+  try {
+    stmt.run(...params);
+  } catch (error: any) {
+    console.error(`Database insert error for ${basename(testFilePath)}:`);
+    console.error(`  Model: ${model}`);
+    console.error(`  Prompt: ${evalPromptFile}`);
+    console.error(`  Error: ${error.message}`);
+    console.error(`  Number of parameters: ${params.length}`);
+    console.error(`  Parameter types:`, params.map(p => typeof p));
+    console.error(`  Parameter lengths:`, params.map(p => String(p).length));
+    // Check for undefined or null
+    params.forEach((p, i) => {
+      if (p === undefined || p === null) {
+        console.error(`  WARNING: Parameter ${i} is ${p}`);
+      }
+    });
+    throw error;
+  }
   
   const success = result.assessment === testData.expected;
   console.log(`  ${success ? '✓' : '✗'} Expected: ${testData.expected}, Got: ${result.assessment}`);
 }
 
 // Process all tests for an application
-async function processApplication(appDir: string, model: string, evaluationPrompt: string, evalPromptFile: string, filter?: string): Promise<void> {
+async function processApplication(appDir: string, model: string, evaluationPrompt: string, evalPromptFile: string, filter?: string, force: boolean = false): Promise<void> {
   const specPath = join(appDir, 'SPEC.md');
   const specPrompt = await extractSpecPrompt(specPath);
   
@@ -347,7 +380,7 @@ async function processApplication(appDir: string, model: string, evaluationPromp
   // Process test files concurrently with limit
   const promises = testFiles.map(testFile => {
     const testFilePath = join(appDir, testFile);
-    return limit(() => processTestFile(testFilePath, specPrompt, evaluationPrompt, model, evalPromptFile));
+    return limit(() => processTestFile(testFilePath, specPrompt, evaluationPrompt, model, evalPromptFile, force));
   });
   
   // Wait for all tests to complete
@@ -355,11 +388,14 @@ async function processApplication(appDir: string, model: string, evaluationPromp
 }
 
 // Main evaluation function
-async function evaluate(models: string[], filter?: string): Promise<void> {
+async function evaluate(models: string[], filter?: string, force: boolean = false): Promise<void> {
   console.log(`Starting evaluation with ${models.length} model(s): ${models.join(', ')}`);
   console.log(`Using up to 5 concurrent API requests`);
   if (filter) {
     console.log(`Filter: "${filter}"`);
+  }
+  if (force) {
+    console.log(`Force mode: Re-evaluating even if results exist`);
   }
   
   // Get all evaluation prompts
@@ -406,7 +442,7 @@ async function evaluate(models: string[], filter?: string): Promise<void> {
         const appDir = join(testsDir, app);
         const stats = await import('fs').then(fs => fs.promises.stat(appDir));
         if (stats.isDirectory()) {
-          await processApplication(appDir, model, evaluationPrompt, evalPromptFile, filter);
+          await processApplication(appDir, model, evaluationPrompt, evalPromptFile, filter, force);
         }
       }
     }
@@ -444,8 +480,16 @@ async function generateTestPage(
     
     const expectedMatch = content.match(/# Expected\s*\n\s*(good|bad)/i);
     testExpected = expectedMatch ? defined(expectedMatch[1]).toLowerCase() : 'unknown';
-  } catch (error) {
-    console.error(`Error reading test file ${testFile}:`, error);
+  } catch (error: any) {
+    console.error(`Error reading test file ${testFile}:`, error.message);
+    // If file doesn't exist, skip generating the page
+    if (error.code === 'ENOENT') {
+      console.log(`Skipping non-existent test file: ${testFile}`);
+      return '';
+    }
+    // For other errors, continue with default values
+    testDescription = 'Error reading file';
+    testCode = 'File could not be read';
   }
   
   const fileName = testFile.split('/').pop() || 'unknown';
@@ -560,12 +604,24 @@ async function generateTestPage(
         
         <details>
           <summary>View Request JSON</summary>
-          <pre class="json-content">${JSON.stringify(JSON.parse(evaluation.request || '{}'), null, 2)}</pre>
+          <pre class="json-content">${(() => {
+            try {
+              return JSON.stringify(JSON.parse(evaluation.request || '{}'), null, 2);
+            } catch {
+              return evaluation.request || '{}';
+            }
+          })()}</pre>
         </details>
         
         <details>
           <summary>View Response JSON</summary>
-          <pre class="json-content">${JSON.stringify(JSON.parse(evaluation.response || '{}'), null, 2)}</pre>
+          <pre class="json-content">${(() => {
+            try {
+              return JSON.stringify(JSON.parse(evaluation.response || '{}'), null, 2);
+            } catch {
+              return evaluation.response || '{}';
+            }
+          })()}</pre>
         </details>
       </div>
     </div>`;
@@ -970,6 +1026,12 @@ async function generateReport(): Promise<void> {
   // Generate individual test pages
   console.log('Generating individual test pages...');
   for (const [testFile, evaluations] of Object.entries(byTestFile)) {
+    // Skip invalid test files (like our test data)
+    if (!testFile.startsWith('tests/') && !testFile.startsWith('/')) {
+      console.log(`Skipping invalid test file path: ${testFile}`);
+      continue;
+    }
+    
     // Extract app name from test file path
     const pathParts = testFile.split('/');
     const appIndex = pathParts.indexOf('tests');
@@ -978,7 +1040,9 @@ async function generateReport(): Promise<void> {
       : 'unknown';
     
     const htmlFileName = await generateTestPage(testFile, evaluations, reportDir, appName);
-    testFilePages[testFile] = htmlFileName;
+    if (htmlFileName) {
+      testFilePages[testFile] = htmlFileName;
+    }
   }
   
   // Calculate statistics for models, prompts, and combinations
@@ -1360,11 +1424,14 @@ async function main() {
       filter = args[filterIndex + 1];
     }
     
+    // Check for force flag
+    const force = args.includes('--force');
+    
     console.log(`Found ${models.length} model(s) to evaluate`);
-    await evaluate(models, filter);
+    await evaluate(models, filter, force);
   } else {
     console.error('Usage:');
-    console.error('  npm run evaluate -- --model <model_name> [--model <model2>] [--filter <pattern>]  # Run evaluation');
+    console.error('  npm run evaluate -- --model <model_name> [--model <model2>] [--filter <pattern>] [--force]  # Run evaluation');
     console.error('  npm run report                                                                     # Generate report');
     console.error('  npm run fix <filename> [-- --model <model_name>] [--prompt <prompt_file>]         # Fix a test file');
     console.error('  npm run autofix -- <percentage> [--model <model_name>] [--prompt <prompt_file>]   # Fix all files ≤ percentage');
@@ -1373,6 +1440,7 @@ async function main() {
     console.error('  npm run evaluate -- --model gpt-4o-mini --filter approve-po                       # Single model with filter');
     console.error('  npm run evaluate -- --model gpt-4o --model claude-3-opus --model gemini-pro       # Multiple models');
     console.error('  npm run evaluate -- --model gpt-4o --model claude-sonnet --filter 01-good         # Multiple models with filter');
+    console.error('  npm run evaluate -- --model gpt-4o --force                                        # Force re-evaluation');
     console.error('  npm run fix approve-po-01-good.md                                  # Fix using default model and prompt');
     console.error('  npm run fix approve-po-01-good.md -- --model gpt-4o --prompt cot.txt             # Fix with specific model and prompt');
     console.error('  npm run autofix -- 50                                              # Fix all files with ≤50% correctness');
