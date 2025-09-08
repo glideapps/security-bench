@@ -41,9 +41,12 @@ This benchmark suite evaluates how well LLMs can detect security vulnerabilities
 
 The system supports multiple evaluation prompts to test different prompting strategies. Prompts are stored in the `eval-prompts/` directory:
 
-- `default.txt` - Standard evaluation prompt
-- `chain-of-thought.txt` - Step-by-step analysis prompt
-- `concise.txt` - Minimal prompt for quick evaluation
+- `default.txt` - Standard evaluation prompt covering common vulnerabilities
+- `chain-of-thought.txt` - Step-by-step analysis prompt with 10 structured steps
+- `concise.txt` - Minimal prompt for quick evaluation (1-2 sentence explanations)
+- `rule-by-rule.txt` - Analyzes code against each individual security rule from the specification
+- `security-checklist.txt` - Uses a checklist approach marking each control as PASS/FAIL/N.A.
+- `attacker-mindset.txt` - Evaluates code from an attacker's perspective looking for exploits
 
 When you run evaluations, the system automatically iterates through ALL prompts in the `eval-prompts/` directory. Each model × prompt combination is evaluated and tracked separately.
 
@@ -54,7 +57,7 @@ To add your own evaluation prompts:
 1. Create a new `.txt` file in the `eval-prompts/` directory
 2. Write your prompt that will be sent after the schema/requirements
 3. End with "Here is the code to evaluate:" or similar
-4. The prompt must request JSON output with `assessment` and `explanation` fields
+4. The prompt must request JSON output with `explanation` and `assessment` fields (in that order)
 
 Example custom prompt (`eval-prompts/security-focused.txt`):
 ```
@@ -63,8 +66,8 @@ Check if the query properly validates user identity and permissions.
 Look for any way an attacker could bypass access controls.
 
 Respond with a JSON object:
-- "assessment": "good" if secure, "bad" if vulnerable
 - "explanation": describe any authorization issues found
+- "assessment": "good" if secure, "bad" if vulnerable
 
 Here is the code to evaluate:
 ```
@@ -75,6 +78,9 @@ Run the full benchmark suite against a specific model (uses all prompts automati
 
 ```bash
 npm run evaluate -- --model gpt-4o-mini
+
+# Force re-evaluation even if results already exist
+npm run evaluate -- --model gpt-4o-mini --force
 ```
 
 Run evaluations with multiple models:
