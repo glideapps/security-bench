@@ -11,7 +11,7 @@ Evaluate whether this code properly implements the security controls and access 
 - Incorrect permission validations
 
 Respond with a JSON object containing exactly two fields:
-1. "assessment": either "good" (secure/compliant) or "bad" (vulnerable/non-compliant)
-2. "explanation": a brief explanation of your reasoning
+1. "explanation": a brief explanation of your reasoning
+2. "assessment": either "good" (secure/compliant) or "bad" (vulnerable/non-compliant)
 
 Here is the code to evaluate:

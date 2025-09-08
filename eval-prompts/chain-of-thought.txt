@@ -14,7 +14,7 @@ STEP 10: Identify any other security concerns specific to this query
 After completing your analysis, provide your final assessment.
 
 Respond with a JSON object containing exactly two fields:
-1. "assessment": either "good" (secure/compliant) or "bad" (vulnerable/non-compliant)
-2. "explanation": a brief explanation summarizing the key findings from your step-by-step analysis
+1. "explanation": a brief explanation summarizing the key findings from your step-by-step analysis
+2. "assessment": either "good" (secure/compliant) or "bad" (vulnerable/non-compliant)
 
 Here is the code to evaluate:

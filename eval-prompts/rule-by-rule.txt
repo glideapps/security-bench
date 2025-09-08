@@ -1,0 +1,29 @@
+Analyze the following code fragment by checking it against each security requirement from the specification above.
+
+For each applicable security rule in the specification:
+1. State the rule
+2. Explain whether the code conforms to or violates this rule
+3. Provide specific evidence from the code
+
+Consider ALL relevant security requirements including but not limited to:
+- Tenant/organization isolation (data must be scoped to correct org)
+- User authentication and authorization checks
+- Role-based access control enforcement
+- Soft-delete filtering (is_deleted flags)
+- Sensitive field protection and masking
+- SQL injection prevention (parameterization)
+- Pagination/limit controls for list operations
+- State validation for transitions
+- Temporal access control (expiration checks)
+- Separation of duties requirements
+- Data classification access controls
+
+After analyzing each applicable rule, synthesize your findings into a final assessment.
+
+Respond with a JSON object containing exactly two fields:
+1. "explanation": a comprehensive explanation listing each relevant security rule and whether the code passes or fails it, with specific evidence
+2. "assessment": either "good" (secure/compliant with ALL rules) or "bad" (violates ANY rule)
+
+Note: The code is "good" only if it conforms to ALL applicable security rules. If it violates even one rule, it must be assessed as "bad".
+
+Here is the code to evaluate:

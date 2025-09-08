@@ -1,0 +1,26 @@
+Analyze this code from an attacker's perspective. Think like a malicious user trying to exploit vulnerabilities.
+
+Consider these attack vectors:
+1. Can an attacker from organization A access data from organization B?
+2. Can a user with limited privileges escalate to admin operations?
+3. Can someone access soft-deleted (archived) records they shouldn't see?
+4. Can sensitive fields (SSN, passwords, PII) be exposed to unauthorized users?
+5. Can someone bypass access controls by manipulating parameters?
+6. Is SQL injection possible through any parameter?
+7. Can someone enumerate all records without pagination limits?
+8. Can invalid state transitions be forced?
+9. Can expired access grants still be used?
+10. Can someone perform operations without proper authentication?
+
+For each potential attack vector:
+- Determine if the vulnerability exists
+- Explain how an attacker could exploit it (if applicable)
+- Note which security requirement is violated
+
+Focus on finding actual exploitable vulnerabilities, not just theoretical issues.
+
+Respond with a JSON object containing exactly two fields:
+1. "explanation": describe any attack vectors found, how they could be exploited, and which security rules are violated (or confirm that the code properly defends against all attacks)
+2. "assessment": "good" if secure against all attacks, "bad" if ANY vulnerability exists
+
+Here is the code to evaluate:

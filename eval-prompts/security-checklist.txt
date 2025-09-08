@@ -1,0 +1,25 @@
+Evaluate this code using a security checklist approach. Check each item and note if it PASSES, FAILS, or is NOT APPLICABLE.
+
+SECURITY CHECKLIST:
+□ SQL Injection Protection: Are all user inputs properly parameterized (using :param or $n syntax)?
+□ Tenant Isolation: Is data properly scoped to the correct organization/tenant?
+□ Access Control: Does the query verify the user has permission to perform this operation?
+□ Role Validation: Are role-based restrictions properly enforced?
+□ Soft Deletes: Are soft-deleted records (is_deleted=true) properly filtered out?
+□ Sensitive Data: Are sensitive fields protected from unauthorized access?
+□ Pagination: Do list queries include appropriate LIMIT clauses?
+□ State Guards: Are state transitions properly validated?
+□ Temporal Controls: Are time-based access grants checked for expiration?
+□ Audit Fields: Are created_by/updated_by fields properly maintained?
+□ Cross-Reference Validation: Are foreign key relationships properly validated?
+
+For each applicable item:
+- Mark PASS if the code correctly implements the security control
+- Mark FAIL if the code violates or lacks the security control  
+- Mark N/A only if the control genuinely doesn't apply to this query type
+
+Respond with a JSON object containing exactly two fields:
+1. "explanation": list each applicable security check with PASS/FAIL status and brief justification
+2. "assessment": "good" if ALL applicable checks PASS, "bad" if ANY check FAILS
+
+Here is the code to evaluate:
